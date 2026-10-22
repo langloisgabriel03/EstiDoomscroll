@@ -35,6 +35,7 @@ class AntiScrollService : AccessibilityService() {
         private const val YOUTUBE_PACKAGE = "com.google.android.youtube"
         private const val YOUTUBE_SOURCE_PATH_DEPTH = 24
         private const val INSTAGRAM_EXIT_TREE_QUIET_MS = 220L
+        private const val REELS_WAIT_SETTLE_MS = 2_000L
         private const val INSTAGRAM_VIEWER_EXIT_RETRY_MS = 500L
         private const val DIRECT_MODAL_COVER_MAX_MS = 1_500L
         private const val PRECOVER_DRAW_HOLD_MS = 150L
@@ -93,7 +94,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         // fallback click. Never race it with another click from this worker;
         // a second accepted action can leave Instagram's notification stack.
         if (instagramNotificationReelSecondBackIssued) return@Runnable
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) return@Runnable
+        if (!instagramGuardActive()) return@Runnable
         val now = SystemClock.uptimeMillis()
         if (instagramFastExitDeadlineAt == 0L || now >= instagramFastExitDeadlineAt) {
             return@Runnable
@@ -273,7 +274,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private var instagramDetailExitChecksRemaining = 0
     private val instagramViewerExitRetry: Runnable = Runnable {
         if (!instagramExitInProgress) return@Runnable
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) {
+        if (!instagramGuardActive()) {
             cancelInstagramExit()
             return@Runnable
         }
@@ -549,8 +550,75 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                 lastInstagramScreen == InstagramScreen.DIRECT_MESSAGES &&
                     InstagramDmInteractionPolicy.blocksSharedMedia(
                         ProtectionPreferences.getMode(this, ProtectedApp.INSTAGRAM))
+            },
+            onReelsTabBlocked = {
+                onInstagramOverlayTouched()
+                // Not from inside the guard's own touch dispatch: showing the
+                // wait screen removes that guard window.
+                mainHandler.post { onInstagramReelsBlocked() }
             }
         )
+    }
+
+    // Reels Wait fork: countdown shown after a blocked Reel. While it is up,
+    // or while an unlock window is open, Instagram's own guards are paused.
+    private val reelsWaitOverlay by lazy {
+        ReelsWaitOverlay(this, onUnlock = ::unlockInstagramReels, onDismiss = ::onReelsWaitDismissed)
+    }
+    private var reelsWaitSuppressedUntil = 0L
+
+    private val reelsRelockCheck = Runnable {
+        if (!instagramGuardActive()) return@Runnable
+        if (rootInActiveWindow?.packageName?.toString() != INSTAGRAM_PACKAGE) return@Runnable
+        Log.d(TAG, "REELS_WAIT_WINDOW_EXPIRED")
+        updateInstagramStructuralNodeAccess(true)
+        queueInstagramScan(0L)
+    }
+
+    private fun instagramGuardActive(): Boolean {
+        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) return false
+        if (reelsWaitOverlay.isVisible) return false
+        val prefs = getSharedPreferences(ProtectionPreferences.PREFS_NAME, Context.MODE_PRIVATE)
+        return !ReelsUnlock.isUnlocked(prefs)
+    }
+
+    /**
+     * A Reel was blocked (Back dispatched) or the Reels tab was tapped. Shows
+     * the wait screen once; repeated events for the same encounter, and the
+     * short settle after "Never mind", only keep the normal block.
+     */
+    private fun onInstagramReelsBlocked() {
+        if (reelsWaitOverlay.isVisible ||
+            SystemClock.uptimeMillis() < reelsWaitSuppressedUntil ||
+            !instagramGuardActive()) return
+        if (!reelsWaitOverlay.show()) return
+        Log.d(TAG, "REELS_WAIT_SHOWN")
+        // The full-screen wait window is the protection now. Removing the
+        // feed curtains also keeps them from being re-added above it.
+        hideInstagramProtection()
+    }
+
+    private fun onReelsWaitDismissed() {
+        Log.d(TAG, "REELS_WAIT_DISMISSED")
+        reelsWaitSuppressedUntil = SystemClock.uptimeMillis() + REELS_WAIT_SETTLE_MS
+        if (rootInActiveWindow?.packageName?.toString() == INSTAGRAM_PACKAGE) {
+            updateInstagramStructuralNodeAccess(true)
+            queueInstagramScan(0L)
+        }
+    }
+
+    private fun unlockInstagramReels() {
+        val prefs = getSharedPreferences(ProtectionPreferences.PREFS_NAME, Context.MODE_PRIVATE)
+        ReelsUnlock.unlock(prefs)
+        Log.d(TAG, "REELS_WAIT_UNLOCKED windowMs=${ReelsWaitConfig.WINDOW_MS}")
+        hideInstagramProtection()
+        mainHandler.removeCallbacks(reelsRelockCheck)
+        mainHandler.postDelayed(reelsRelockCheck, ReelsUnlock.remainingMs(prefs) + 250L)
+        // Best effort: take the user straight to the Reels tab they asked for.
+        val root = rootInActiveWindow
+        if (root != null && root.packageName?.toString() == INSTAGRAM_PACKAGE) {
+            performInstagramTabAction(root, "clips_tab")
+        }
     }
     private val youtubeOverlay by lazy {
         YouTubeProtectionOverlayController(
@@ -920,7 +988,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                 trackPackageTransition("")
                 return
             }
-            if (!ProtectionPreferences.isEnabled(this@AntiScrollService, ProtectedApp.INSTAGRAM)) {
+            if (!instagramGuardActive()) {
                 hideInstagramProtection()
                 return
             }
@@ -1417,7 +1485,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             }
             val root = rootInActiveWindow
             if (root == null || root.packageName?.toString() != INSTAGRAM_PACKAGE ||
-                !ProtectionPreferences.isEnabled(this@AntiScrollService, ProtectedApp.INSTAGRAM)
+                !instagramGuardActive()
             ) {
                 stopProfileCurtainEnsure()
                 return
@@ -1567,7 +1635,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             }
             val root = rootInActiveWindow
             if (root == null || root.packageName?.toString() != INSTAGRAM_PACKAGE ||
-                !ProtectionPreferences.isEnabled(this@AntiScrollService, ProtectedApp.INSTAGRAM) ||
+                !instagramGuardActive() ||
                 !instagramProfilePostsBlocked()) {
                 // Leaving Instagram or losing the mode stops the loop for good.
                 profileGeometryWatchActive = false
@@ -1892,7 +1960,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                 mainHandler.postDelayed(this, remaining)
                 return
             }
-            if (!ProtectionPreferences.isEnabled(this@AntiScrollService, ProtectedApp.INSTAGRAM)) return
+            if (!instagramGuardActive()) return
             val root = rootInActiveWindow ?: return
             if (root.packageName?.toString() != INSTAGRAM_PACKAGE) return
             val retained = instagramOverlay.visibleCurtain() ?: return
@@ -1914,7 +1982,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     }
 
     private fun handleInstagram(event: AccessibilityEvent) {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) {
+        if (!instagramGuardActive()) {
             hideInstagramProtection()
             return
         }
@@ -2375,7 +2443,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             return
         }
         lastInstagramScanTime = SystemClock.uptimeMillis()
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) {
+        if (!instagramGuardActive()) {
             hideInstagramProtection()
             return
         }
@@ -3206,7 +3274,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
      * there the first Back closes the IME, not the search surface.
      */
     private fun onSearchReturnBack() {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) ||
+        if (!instagramGuardActive() ||
             lastInstagramScreen != InstagramScreen.SEARCH_RESULTS) return
         val root = rootInActiveWindow ?: return
         if (root.packageName?.toString() != INSTAGRAM_PACKAGE) return
@@ -4667,7 +4735,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     }
 
     private fun onInstagramProfileReturnBack() {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) ||
+        if (!instagramGuardActive() ||
             !instagramProfilePostsBlocked()) return
         val now = SystemClock.uptimeMillis()
         val root = rootInActiveWindow ?: return
@@ -4686,7 +4754,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         }
         instagramOverlay.afterCurtainDraw {
             if (!instagramProfileReturn.accepts(token, SystemClock.uptimeMillis()) ||
-                !ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) {
+                !instagramGuardActive()) {
                 return@afterCurtainDraw
             }
             val current = rootInActiveWindow ?: return@afterCurtainDraw
@@ -5426,6 +5494,10 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                 clickedBack || performGlobalAction(GLOBAL_ACTION_BACK)
             }
             if (accepted) instagramExitTreeQuietUntil = now + INSTAGRAM_EXIT_TREE_QUIET_MS
+            if (accepted && newViewerEncounter && screen == InstagramScreen.REELS) {
+                // Let this exit finish before the wait screen pauses the guards.
+                mainHandler.post { onInstagramReelsBlocked() }
+            }
             if (accepted && fromNotificationSurface) {
                 instagramNotificationBackCount++
                 // The comment sheet is already proven in the same accessibility
@@ -6933,7 +7005,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             InstagramNotificationShadePolicy.canReuseShadeWindow(
                 instagramOverlay.isNotificationShadeSuspended, activeRoot.windowId,
                 instagramNotificationShadeWindowId) &&
-            ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) {
+            instagramGuardActive()) {
             scheduleInstagramShadeCheck()
             return true
         }
@@ -6949,7 +7021,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         ).any { id -> systemRoot.findAccessibilityNodeInfosByViewId("com.android.systemui:id/$id")
             .orEmpty().any { it.isVisibleToUser } }
         if (!InstagramNotificationShadePolicy.canRetain(
-                enabled = ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM),
+                enabled = instagramGuardActive(),
                 screen = lastInstagramScreen,
                 curtainAttached = instagramOverlay.hasVisibleWindows,
                 instagramUnderneath = InstagramNotificationShadePolicy.hasInstagramContext(
@@ -6991,7 +7063,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             screen == lastInstagramScreen && root.windowId == currentInstagramWindowId &&
                 bounds.width() == display.width() && display.contains(bounds)
         }
-        if (ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) && retained != null &&
+        if (instagramGuardActive() && retained != null &&
             matchesRetainedInstagramFeed(root, retained.first)) {
             clearInstagramResumeProtection()
             if (instagramOverlay.show(retained.second, retained.first, isEnglish())) {
@@ -7001,7 +7073,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                 return
             }
         }
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) ||
+        if (!instagramGuardActive() ||
             !refreshFastMainProtectedSurface(root, instagramWindowBounds(root))) {
             // A notification can open a chat/search/player, even in the same
             // activity window. Never restore merely from the old screen/window.
@@ -7613,7 +7685,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private val instagramProfileIngress = InstagramProfileIngress()
 
     private fun armInstagramNativeAccountEntry(event: AccessibilityEvent): Boolean {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) ||
+        if (!instagramGuardActive() ||
             !instagramStoriesBlocked() || instagramProfileIngress.pending ||
             SystemClock.uptimeMillis() - event.eventTime !in 0L..1_500L) return false
         val source = event.source ?: return false
@@ -7734,7 +7806,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private fun onInstagramAccountSearchTap(x: Float, y: Float) {
         if (!InstagramProfileInteractionPolicy.interceptsProfileTouches(
                 ProtectionPreferences.getMode(this, ProtectedApp.INSTAGRAM))) return
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) ||
+        if (!instagramGuardActive() ||
             !instagramStoriesBlocked() || instagramProfileIngress.pending) return
         val root = rootInActiveWindow ?: return
         if (root.packageName?.toString() != INSTAGRAM_PACKAGE) return
@@ -7898,7 +7970,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     }
 
     private fun onInstagramNotificationLaunch() {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) ||
+        if (!instagramGuardActive() ||
             ProtectionPreferences.getMode(this, ProtectedApp.INSTAGRAM) != ProtectionMode.STRICT) return
         val root = rootInActiveWindow ?: return
         if (root.packageName?.toString() != INSTAGRAM_PACKAGE) return
@@ -7969,7 +8041,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     }
 
     private fun onInstagramNotificationTap(x: Float, y: Float) {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) ||
+        if (!instagramGuardActive() ||
             ProtectionPreferences.getMode(this, ProtectedApp.INSTAGRAM) != ProtectionMode.STRICT) return
         // No row action is safe until the transition has handed input over to
         // the drawn row guards. In particular, never replay a loading tap on
@@ -8024,7 +8096,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
 
     private fun onInstagramProtectedNavigation(tab: InstagramTab) {
         if (tab != InstagramTab.HOME && tab != InstagramTab.SEARCH) return
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) return
+        if (!instagramGuardActive()) return
         val now = SystemClock.uptimeMillis()
         if (isRecentProxiedNavigation(tab, now)) return
         val root = rootInActiveWindow ?: return
@@ -8073,7 +8145,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         targetId: String,
         source: String
     ) {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) {
+        if (!instagramGuardActive()) {
             instagramProtectedNavigation.clear(request)
             return
         }
@@ -8232,7 +8304,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     }
 
     private fun onInstagramNotificationBack() {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) return
+        if (!instagramGuardActive()) return
         val root = rootInActiveWindow ?: return
         if (root.packageName?.toString() != INSTAGRAM_PACKAGE ||
             instagramStateMachine.currentScreen != InstagramScreen.NOTIFICATIONS ||
@@ -8257,7 +8329,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         }
         instagramOverlay.afterCurtainDraw {
             if (!instagramNotificationReturn.accepts(token, SystemClock.uptimeMillis()) ||
-                !ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) return@afterCurtainDraw
+                !instagramGuardActive()) return@afterCurtainDraw
             val current = rootInActiveWindow ?: return@afterCurtainDraw
             if (current.packageName?.toString() != INSTAGRAM_PACKAGE || current.windowId != windowId ||
                 instagramStateMachine.currentScreen != InstagramScreen.NOTIFICATIONS) return@afterCurtainDraw
@@ -8498,7 +8570,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         val previous = instagramOverlay.visibleHomeBounds() ?: return false
         val root = rootInActiveWindow ?: return false
         if (root.packageName?.toString() != INSTAGRAM_PACKAGE ||
-            !ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) return false
+            !instagramGuardActive()) return false
         if (event != null && (event.windowId != root.windowId ||
                 SystemClock.uptimeMillis() - event.eventTime !in 0L..1_500L)) return false
         val window = instagramWindowBounds(root)
@@ -8723,7 +8795,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     }
 
     private fun onInstagramOverlayTouched() {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) return
+        if (!instagramGuardActive()) return
         // Only explicit blocked entry guards call this. Plain content-curtain
         // touches are not proof of an attempt to open a video or Story.
         recordIntervention(INSTAGRAM_PACKAGE, System.currentTimeMillis())
@@ -8737,7 +8809,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
      * collapsing direction stays blocked.
      */
     private fun expandStrictProfileHeader() {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) ||
+        if (!instagramGuardActive() ||
             !instagramProfilePostsBlocked() || lastInstagramScreen != InstagramScreen.PROFILE) return
         val root = rootInActiveWindow ?: return
         if (root.packageName?.toString() != INSTAGRAM_PACKAGE) return
@@ -8761,7 +8833,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private fun onInstagramStoryEntrySwipe(x: Float, y: Float, direction: InstagramStoryGuardSwipe) {
         if (!InstagramProfileInteractionPolicy.interceptsProfileTouches(
                 ProtectionPreferences.getMode(this, ProtectedApp.INSTAGRAM))) return
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) || !instagramStoriesBlocked()) return
+        if (!instagramGuardActive() || !instagramStoriesBlocked()) return
         val root = rootInActiveWindow ?: return
         if (root.packageName?.toString() != INSTAGRAM_PACKAGE || !hasVisibleProfileHeaderMarkers(root)) return
         val horizontal = direction == InstagramStoryGuardSwipe.HIGHLIGHTS_FORWARD ||
@@ -9180,7 +9252,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     }
 
     private fun beginInstagramResumeProtection(root: AccessibilityNodeInfo? = rootInActiveWindow) {
-        if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) return
+        if (!instagramGuardActive()) return
         root ?: return
         if (root.packageName?.toString() != INSTAGRAM_PACKAGE) return
         val screen = lastInstagramScreen.takeIf(InstagramSurfacePolicy::needsCurtain) ?: run {
@@ -9336,7 +9408,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private val instagramShadeRecovery = Runnable {
         val root = rootInActiveWindow ?: return@Runnable
         if (root.packageName?.toString() != INSTAGRAM_PACKAGE ||
-            !ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM) ||
+            !instagramGuardActive() ||
             instagramOverlay.visibleCurtain() != null) return@Runnable
         instagramResumePending = true
         beginInstagramResumeProtection(root)
@@ -9429,6 +9501,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         if (ProtectionFlightRecorder.ENABLED) {
             ProtectionFlightRecorder.record(this, "service.unbind")
         }
+        reelsWaitOverlay.hide()
         hideInstagramProtection()
         youtubeOverlay.hideAll()
         AccessibilityStreakPolicy.onServiceDisconnected(this)
@@ -9440,6 +9513,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         if (ProtectionFlightRecorder.ENABLED) {
             ProtectionFlightRecorder.record(this, "service.destroy")
         }
+        reelsWaitOverlay.hide()
         hideInstagramProtection()
         youtubeOverlay.hideAll()
         AccessibilityStreakPolicy.onServiceDisconnected(this)

@@ -40,7 +40,9 @@ internal class InstagramFeedOverlayController(
     private val onProfileSwipeDown: (Float, Float) -> Unit = { _, _ -> },
     // Where a guarded control has a harmless long-press action (a chat message's
     // react/reply menu), a held press is replayed underneath instead of blocked.
-    private val entryGuardReplaysLongPress: () -> Boolean = { false }
+    private val entryGuardReplaysLongPress: () -> Boolean = { false },
+    // Reels Wait fork: a tap on the blocked Reels tab opens the wait screen.
+    private val onReelsTabBlocked: () -> Unit = onBlockedTouch
 ) {
     companion object {
         private const val TAG = "InstagramOverlay"
@@ -411,7 +413,7 @@ internal class InstagramFeedOverlayController(
      */
     fun updateReelsTabGuard(bounds: Rect?) {
         reelsTabGuardWindow = updateNotificationWindow(reelsTabGuardWindow, bounds,
-            "reels tab guard", onBlockedTouch)
+            "reels tab guard", onReelsTabBlocked)
     }
 
     /**
