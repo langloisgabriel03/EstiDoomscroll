@@ -951,9 +951,9 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             this,
             if (isEn) "Protection active" else "Koruma etkin",
             if (isEn) {
-                "AwayDoomscrollin' is protecting the feeds you selected in Instagram, TikTok and YouTube."
+                "Reels Wait is protecting the feeds you selected in Instagram, TikTok and YouTube."
             } else {
-                "AwayDoomscrollin' Instagram, TikTok ve YouTube'da seçtiğiniz akışları koruyor."
+                "Reels Wait Instagram, TikTok ve YouTube'da seçtiğiniz akışları koruyor."
             },
             1001
         )

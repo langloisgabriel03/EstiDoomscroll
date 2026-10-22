@@ -1,3 +1,11 @@
+> **Reels Wait — a personal fork.** This repository is a fork of
+> [AwayDoomscrollin'](https://github.com/resolvecommunity/AwayDoomscrollin) by
+> Resolve Community, licensed under GPL-3.0-only. It is not affiliated with or
+> endorsed by Resolve Community, Meta or Instagram. The fork installs as
+> `com.gab.reelswait` under the name "Reels Wait" and replaces the hard block
+> on Instagram Reels with a wait timer: a countdown, then a short window where
+> Instagram is unguarded. The rest of this README describes the upstream app.
+
 <p align="center">
   <img src="assets/logo.png" alt="AwayDoomscrollin' logo" width="120"/>
 </p>

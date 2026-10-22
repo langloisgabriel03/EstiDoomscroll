@@ -26,7 +26,7 @@ android {
         !playKeyPassword.isNullOrBlank()
 
     defaultConfig {
-        applicationId = "com.resolvecommunity.awaydoomscrollin"
+        applicationId = "com.gab.reelswait"
         minSdk = 26
         targetSdk = 36
         versionCode = 9
