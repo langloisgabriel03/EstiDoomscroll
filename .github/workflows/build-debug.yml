@@ -61,6 +61,13 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
+      # Every build must show the same fingerprint, or phones refuse the
+      # update with "App not installed".
+      - name: Show Signing Key Fingerprint
+        run: |
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/*.apk | grep -i "SHA-256"
+
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
