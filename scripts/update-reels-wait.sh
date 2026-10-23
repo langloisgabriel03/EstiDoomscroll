@@ -29,6 +29,12 @@ if command -v aapt >/dev/null; then
 fi
 echo "After installing, Settings > Apps > Reels Wait should show version ending in .$RUN_NUMBER"
 
-# Opens Android's installer. If nothing appears, open Files > Downloads >
-# reels-wait.apk instead (or allow Termux to install apps when asked).
-termux-open "$DEST" 2>/dev/null || echo "Open Files > Downloads > reels-wait.apk to install."
+# termux-open hands the file to Android's installer through Termux's content
+# provider, which only works with allow-external-apps = true. Without it the
+# installer fails with "TermuxContentProvider requires allow-external-apps".
+if grep -qsE '^[[:space:]]*allow-external-apps[[:space:]]*=[[:space:]]*true' \
+    "$HOME/.termux/termux.properties" "$HOME/.config/termux/termux.properties"; then
+  termux-open "$DEST" 2>/dev/null || echo "Now open My Files > Downloads > reels-wait.apk and tap Update."
+else
+  echo "Now open My Files > Downloads > reels-wait.apk and tap Update."
+fi
