@@ -551,12 +551,8 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                     InstagramDmInteractionPolicy.blocksSharedMedia(
                         ProtectionPreferences.getMode(this, ProtectedApp.INSTAGRAM))
             },
-            onReelsTabBlocked = {
-                onInstagramOverlayTouched()
-                // Not from inside the guard's own touch dispatch: showing the
-                // wait screen removes that guard window.
-                mainHandler.post { onInstagramReelsBlocked() }
-            }
+            onReelsTabBlocked = ::onInstagramReelsGuardTapped,
+            onEntryGuardTap = ::onInstagramReelsGuardTapped
         )
     }
 
@@ -575,6 +571,13 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         queueInstagramScan(0L)
     }
 
+    private fun onInstagramReelsGuardTapped() {
+        onInstagramOverlayTouched()
+        // Not from inside the guard's own touch dispatch: showing the wait
+        // screen removes that guard window.
+        mainHandler.post { onInstagramReelsBlocked() }
+    }
+
     private fun instagramGuardActive(): Boolean {
         if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) return false
         if (reelsWaitOverlay.isVisible) return false
@@ -591,7 +594,12 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         if (reelsWaitOverlay.isVisible ||
             SystemClock.uptimeMillis() < reelsWaitSuppressedUntil ||
             !instagramGuardActive()) return
-        if (!reelsWaitOverlay.show()) return
+        if (!reelsWaitOverlay.show()) {
+            // Visible on the phone, where the log is not.
+            android.widget.Toast.makeText(this, "Reels Wait: could not show the wait screen",
+                android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
         Log.d(TAG, "REELS_WAIT_SHOWN")
         // The full-screen wait window is the protection now. Removing the
         // feed curtains also keeps them from being re-added above it.

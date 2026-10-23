@@ -41,8 +41,10 @@ internal class InstagramFeedOverlayController(
     // Where a guarded control has a harmless long-press action (a chat message's
     // react/reply menu), a held press is replayed underneath instead of blocked.
     private val entryGuardReplaysLongPress: () -> Boolean = { false },
-    // Reels Wait fork: a tap on the blocked Reels tab opens the wait screen.
-    private val onReelsTabBlocked: () -> Unit = onBlockedTouch
+    // Reels Wait fork: a tap on the blocked Reels tab, or on any entry guard
+    // (the Reels tab on main surfaces, Reel cards in DMs), opens the wait screen.
+    private val onReelsTabBlocked: () -> Unit = onBlockedTouch,
+    private val onEntryGuardTap: () -> Unit = onBlockedTouch
 ) {
     companion object {
         private const val TAG = "InstagramOverlay"
@@ -604,7 +606,7 @@ internal class InstagramFeedOverlayController(
                                                 held.coerceIn(600L, 1_000L))
                                         } else {
                                             Log.d(TAG, "IG_ENTRY_TOUCH consumed")
-                                            onBlockedTouch()
+                                            onEntryGuardTap()
                                             target.performClick()
                                         }
                                     }
