@@ -35,7 +35,10 @@ internal class YouTubeProtectionOverlayController(
     private val onAllowedYouNavigation: () -> Unit,
     private val onAllowedBackNavigationDown: () -> Unit = {},
     private val onAllowedLaunchNavigation: (YouTubeCurtainScreen) -> Unit = {},
-    private val onCurtainVisibilityChanged: (Boolean) -> Unit = {}
+    private val onCurtainVisibilityChanged: (Boolean) -> Unit = {},
+    // Reels Wait fork: no feed curtain and none of the navigation guards that
+    // keep it consistent; only the Shorts guard (and the Shorts exit) remain.
+    private val keepFeedsOpen: Boolean = false
 ) {
     companion object {
         private const val TAG = "YouTubeOverlay"
@@ -100,6 +103,11 @@ internal class YouTubeProtectionOverlayController(
         get() = curtain?.visibility == View.VISIBLE
 
     fun afterCurtainDraw(action: () -> Unit) {
+        if (keepFeedsOpen) {
+            // No curtain to wait for; navigation proceeds at once.
+            action()
+            return
+        }
         val view = curtain ?: return
         val listener = object : android.view.ViewTreeObserver.OnPreDrawListener {
             override fun onPreDraw(): Boolean {
@@ -179,6 +187,7 @@ internal class YouTubeProtectionOverlayController(
         isEnglish: Boolean,
         preserveBounds: Boolean = false
     ): Boolean {
+        if (keepFeedsOpen && surface != null) return showCurtain(bounds, null, isEnglish, preserveBounds)
         if (surface == null) {
             // Release the window immediately on verified allowed pages. Visibility/layout
             // changes can leave its last submitted opaque frame on screen until traversal.
@@ -559,7 +568,7 @@ internal class YouTubeProtectionOverlayController(
         preserveBounds: Boolean = false,
         suspendedSurface: YouTubeProtectedSurface? = null
     ) {
-        if (!active) {
+        if (!active || keepFeedsOpen) {
             hideProtectedNavigationGuard(YouTubeProtectedSurface.HOME)
             hideProtectedNavigationGuard(YouTubeProtectedSurface.SUBSCRIPTIONS)
             return
@@ -594,7 +603,7 @@ internal class YouTubeProtectionOverlayController(
         if (requested != null && (!preserveBounds || lastStableYouNavigationBounds == null)) {
             lastStableYouNavigationBounds = Rect(requested)
         }
-        if (!active) {
+        if (!active || keepFeedsOpen) {
             hideYouNavigationGuard()
             return
         }
@@ -649,7 +658,7 @@ internal class YouTubeProtectionOverlayController(
             ?: protectedNavigationGuards[surface]?.bounds?.let(::Rect)
 
     fun updateAllowedBackGuard(bounds: Rect?, isEnglish: Boolean) {
-        if (!valid(bounds, minimumWidthDp = 36, minimumHeightDp = 36)) {
+        if (keepFeedsOpen || !valid(bounds, minimumWidthDp = 36, minimumHeightDp = 36)) {
             hideAllowedBackGuard()
             return
         }
@@ -719,6 +728,10 @@ internal class YouTubeProtectionOverlayController(
         bounds: Map<YouTubeCurtainScreen, Rect>,
         isEnglish: Boolean
     ) {
+        if (keepFeedsOpen) {
+            allowedLaunchGuards.keys.toList().forEach(::releaseAllowedLaunchGuard)
+            return
+        }
         val targets = bounds.filter { (screen, target) ->
             (screen == YouTubeCurtainScreen.SEARCH ||
                 screen == YouTubeCurtainScreen.NOTIFICATIONS) &&
@@ -807,6 +820,7 @@ internal class YouTubeProtectionOverlayController(
         surface: YouTubeProtectedSurface,
         isEnglish: Boolean
     ) {
+        if (keepFeedsOpen) return
         updateProtectedNavigationGuard(
             surface = surface,
             bounds = stableProtectedNavigationBounds[surface],

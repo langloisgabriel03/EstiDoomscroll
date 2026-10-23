@@ -18,8 +18,11 @@ internal object InstagramSurfacePolicy {
         profileSurfaceVisible: Boolean): Boolean =
         profileCurtainVisible && searchEditorVisible && accountRowVisible && !profileSurfaceVisible
 
-    fun needsCurtain(screen: InstagramScreen): Boolean =
-        screen == InstagramScreen.HOME_FEED || screen == InstagramScreen.EXPLORE ||
+    fun needsCurtain(
+        screen: InstagramScreen,
+        keepFeedsOpen: Boolean = ReelsWaitConfig.KEEP_FEEDS_OPEN
+    ): Boolean =
+        (!keepFeedsOpen && (screen == InstagramScreen.HOME_FEED || screen == InstagramScreen.EXPLORE)) ||
             screen == InstagramScreen.PROFILE || screen == InstagramScreen.DIRECT_SHARED_MEDIA
 
     fun needsExit(screen: InstagramScreen): Boolean =

@@ -15,6 +15,12 @@ object ReelsWaitConfig {
     const val WINDOW_MS = WINDOW_MINUTES * 60_000L
 
     /**
+     * Keep the Instagram Home/Explore and YouTube Home/Subscriptions feeds
+     * visible; only Reels and Shorts stay blocked. Upstream covers the feeds.
+     */
+    const val KEEP_FEEDS_OPEN = true
+
+    /**
      * Hook for later friction ideas (escalating waits per unlock, daily caps).
      * Every caller asks here instead of reading [WAIT_SECONDS] directly.
      */

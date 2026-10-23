@@ -646,6 +646,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         YouTubeProtectionOverlayController(
             service = this,
             onShortsBlocked = ::onYouTubeShortsGuardBlocked,
+            keepFeedsOpen = ReelsWaitConfig.KEEP_FEEDS_OPEN,
             onProtectedNavigation = ::onYouTubeProtectedNavigation,
             onAllowedBackNavigation = ::onYouTubeAllowedBackNavigation,
             onAllowedYouNavigation = ::onYouTubeAllowedYouNavigation,

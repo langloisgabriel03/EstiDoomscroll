@@ -41,8 +41,17 @@ class InstagramSurfacePolicyTest {
             assertEquals(screen.name, screen in setOf(
                 InstagramScreen.HOME_FEED, InstagramScreen.EXPLORE, InstagramScreen.PROFILE,
                 InstagramScreen.DIRECT_SHARED_MEDIA),
-                InstagramSurfacePolicy.needsCurtain(screen))
+                InstagramSurfacePolicy.needsCurtain(screen, keepFeedsOpen = false))
         }
+    }
+    @Test fun keepFeedsOpenUncoversHomeAndExploreOnly() {
+        for (screen in InstagramScreen.entries) {
+            assertEquals(screen.name, screen in setOf(
+                InstagramScreen.PROFILE, InstagramScreen.DIRECT_SHARED_MEDIA),
+                InstagramSurfacePolicy.needsCurtain(screen, keepFeedsOpen = true))
+        }
+        // Reels are still exited, not curtained.
+        assertTrue(InstagramSurfacePolicy.needsExit(InstagramScreen.REELS))
     }
     @Test fun dmSharedMediaUsesACurtainWithoutBecomingAViewerExit() {
         val screen = InstagramProtectionEngine.classify(InstagramUiSignals(ids = setOf(
