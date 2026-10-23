@@ -57,6 +57,9 @@ internal object UnlockChallenges {
         get() = factories.size
 
     fun random(random: Random = Random.Default): UnlockChallenge = factories.random(random)()
+
+    /** One fresh instance of every game, for tests. */
+    fun all(): List<UnlockChallenge> = factories.map { it() }
 }
 
 /** Shared look for the wait screen and its games. */

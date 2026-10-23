@@ -112,10 +112,13 @@ internal class ReelsWaitOverlay(
         android.widget.Toast.makeText(service, message, android.widget.Toast.LENGTH_SHORT).show()
     }
 
+    /** For tests: the mounted screen, or null. */
+    internal val viewForTest: View?
+        get() = root
+
     /** Returns false when the screen is already visible or cannot be added. */
-    fun show(): Boolean {
+    fun show(game: UnlockChallenge = UnlockChallenges.random()): Boolean {
         if (root != null) return false
-        val game = UnlockChallenges.random()
         return try {
             val view = buildView(game)
             val windowParams = layoutParams()
