@@ -47,7 +47,6 @@ internal interface UnlockChallenge {
 
 internal object UnlockChallenges {
     private val factories: List<() -> UnlockChallenge> = listOf(
-        ::ReasonChallenge,
         ::TypingChallenge,
         ::MathChallenge,
         ::HoldChallenge
@@ -133,55 +132,6 @@ internal class ChallengeUi(val context: Context) {
             context.getSystemService(InputMethodManager::class.java)
                 ?.showSoftInput(field, InputMethodManager.SHOW_IMPLICIT)
         }
-    }
-}
-
-/** "Why am I here?": pick a reason and write a sentence about it. */
-internal class ReasonChallenge : UnlockChallenge {
-    override val title = "Why am I here?"
-
-    override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
-        val box = ui.column()
-        var chosen: String? = null
-        val chips = mutableListOf<TextView>()
-        val detail = ui.input("Say a bit more…",
-            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        val status = ui.text("", 13f, ui.dim)
-        val unlock = ui.button("Unlock", filled = false) {
-            if (ReasonCheck.isValid(chosen, detail.text.toString())) onSolved()
-        }
-
-        fun refresh() {
-            chips.forEach { chip ->
-                val selected = chip.text.toString() == chosen
-                (chip.background as GradientDrawable).setColor(
-                    if (selected) Color.argb(90, 255, 255, 255) else Color.TRANSPARENT)
-            }
-            val missing = ReasonCheck.charsMissing(detail.text.toString())
-            status.text = when {
-                chosen == null -> "Pick the honest answer"
-                missing > 0 -> "$missing more characters"
-                else -> "Thanks for being honest"
-            }
-            unlock.alpha = if (ReasonCheck.isValid(chosen, detail.text.toString())) 1f else 0.35f
-        }
-
-        ReasonCheck.reasons.forEach { reason ->
-            val chip = ui.button(reason, filled = false) {
-                chosen = reason
-                refresh()
-            }
-            chip.textSize = 14f
-            chip.setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(10))
-            chips += chip
-            box.addView(chip, ui.params(top = ui.dp(6)))
-        }
-        detail.addTextChangedListener(afterChanged { refresh() })
-        box.addView(detail, ui.params(top = ui.dp(12)))
-        box.addView(status, ui.params(top = ui.dp(6)))
-        box.addView(unlock, ui.params(top = ui.dp(10)))
-        refresh()
-        return box
     }
 }
 

@@ -12,17 +12,6 @@ import kotlin.random.Random
 class UnlockChallengeLogicTest {
 
     @Test
-    fun `reason needs a choice and enough detail`() {
-        val detail = "Avoiding my homework, honestly"
-        assertFalse(ReasonCheck.isValid(null, detail))
-        assertFalse(ReasonCheck.isValid("I'm bored", "too short"))
-        assertFalse(ReasonCheck.isValid("I'm bored", "   padded with spaces   "))
-        assertTrue(ReasonCheck.isValid("I'm bored", detail))
-        assertEquals(11, ReasonCheck.charsMissing("too short"))
-        assertEquals(0, ReasonCheck.charsMissing(detail))
-    }
-
-    @Test
     fun `typing marks each letter correct, wrong or pending`() {
         assertEquals(listOf(CORRECT, WRONG, PENDING, PENDING), TypingCheck.states("abcd", "ax"))
         assertEquals(listOf(PENDING, PENDING), TypingCheck.states("ab", ""))
@@ -77,6 +66,6 @@ class UnlockChallengeLogicTest {
 
     @Test
     fun `every game is registered`() {
-        assertEquals(4, UnlockChallenges.count)
+        assertEquals(3, UnlockChallenges.count)
     }
 }

@@ -8,25 +8,6 @@ import kotlin.random.Random
  * so they are unit tested. The views live in UnlockChallenges.kt.
  */
 
-/** "Why am I here?": pick a reason, then say a little more about it. */
-object ReasonCheck {
-    const val MIN_DETAIL_CHARS = 20
-
-    val reasons = listOf(
-        "I'm bored",
-        "Avoiding something",
-        "Someone sent me a Reel",
-        "I want to relax on purpose",
-        "Habit, didn't think"
-    )
-
-    fun isValid(reason: String?, detail: String): Boolean =
-        reason != null && detail.trim().length >= MIN_DETAIL_CHARS
-
-    fun charsMissing(detail: String): Int =
-        (MIN_DETAIL_CHARS - detail.trim().length).coerceAtLeast(0)
-}
-
 /** Typing test: copy a sentence exactly, mistakes must be fixed. */
 object TypingCheck {
     enum class CharState { CORRECT, WRONG, PENDING }
