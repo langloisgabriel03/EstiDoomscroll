@@ -205,6 +205,12 @@ internal class ReelsWaitOverlay(
         column.addView(card, ui.params(top = ui.dp(20)))
 
         column.addView(ui.button("Never mind", filled = true) { dismiss() }, ui.params(top = ui.dp(20)))
+        @Suppress("DEPRECATION")
+        val version = runCatching {
+            service.packageManager.getPackageInfo(service.packageName, 0).versionName
+        }.getOrNull().orEmpty()
+        column.addView(ui.text("Reels Wait $version", 11f, Color.argb(90, 255, 255, 255)),
+            ui.params(top = ui.dp(16)))
 
         val scroll = ScrollView(service).apply {
             isFillViewport = true

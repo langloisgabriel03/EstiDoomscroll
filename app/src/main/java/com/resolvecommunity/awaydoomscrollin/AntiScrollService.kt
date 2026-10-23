@@ -1021,6 +1021,11 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         }
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        ReelsWaitCrashReport.install(this)
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instagramStructuralNodesRequested = null
@@ -1047,6 +1052,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             },
             1001
         )
+        ReelsWaitCrashReport.showPending(this)
         Log.d(TAG, "Accessibility protection connected")
         if (ProtectionFlightRecorder.ENABLED) {
             @Suppress("DEPRECATION")

@@ -58,7 +58,8 @@ android {
             // Keep local device builds isolated from the release-signed app so
             // testing never requires uninstalling it or erasing user data.
             applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
+            // CI builds carry their run number so the installed build is identifiable.
+            versionNameSuffix = "-debug" + (System.getenv("GITHUB_RUN_NUMBER")?.let { ".$it" } ?: "")
         }
         release {
             isMinifyEnabled = true
