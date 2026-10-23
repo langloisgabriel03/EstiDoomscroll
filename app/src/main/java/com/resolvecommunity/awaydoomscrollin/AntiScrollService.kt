@@ -191,7 +191,8 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private var lastPackage = ""
     private var instagramSessionStartedAt = 0L
     private var lastInstagramScreen = InstagramScreen.UNKNOWN
-    private val instagramStateMachine = InstagramProtectionStateMachine()
+    private val instagramStateMachine = InstagramProtectionStateMachine(
+        allowCommentsAndPosts = ReelsWaitConfig.KEEP_FEEDS_OPEN)
     private val instagramBalancedProfilePost = InstagramBalancedProfilePostSession()
     private var instagramBalancedProfileReelIntentWindowId = -1
     private var instagramBalancedProfileReelIntentUntil = 0L
@@ -5404,6 +5405,9 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         keepOriginCover: Boolean = false
     ) {
         if (screen == InstagramScreen.REELS && allowBalancedInstagramReel(root)) return
+        // Reels Wait fork: with the Home feed open, its comments and single
+        // posts stay open too. Several fast paths call this directly.
+        if (screen == InstagramScreen.COMMENTS_OR_DETAIL && ReelsWaitConfig.KEEP_FEEDS_OPEN) return
         val wasDirectConversation = lastInstagramScreen == InstagramScreen.DIRECT_MESSAGES
         val wasNotificationSurface = lastInstagramScreen == InstagramScreen.NOTIFICATIONS
         val now = SystemClock.uptimeMillis()

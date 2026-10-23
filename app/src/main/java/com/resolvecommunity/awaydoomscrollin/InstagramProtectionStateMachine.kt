@@ -14,8 +14,15 @@ internal data class InstagramProtectionDecision(
     val changed: Boolean
 )
 
-/** The single owner of Instagram surface transitions; geometry is deliberately absent. */
-internal class InstagramProtectionStateMachine {
+/**
+ * The single owner of Instagram surface transitions; geometry is deliberately absent.
+ *
+ * Reels Wait fork: [allowCommentsAndPosts] keeps comments and single-post
+ * viewers open (upstream exits them), for use with an open Home feed.
+ */
+internal class InstagramProtectionStateMachine(
+    private val allowCommentsAndPosts: Boolean = false
+) {
     var currentScreen: InstagramScreen = InstagramScreen.UNKNOWN
         private set
     var currentWindowId: Int = -1
@@ -40,7 +47,8 @@ internal class InstagramProtectionStateMachine {
             screen == InstagramScreen.PROFILE && allowProfile -> InstagramProtectionAction.ALLOW
             screen == InstagramScreen.SAVED_COLLECTION && allowUserCollection ->
                 InstagramProtectionAction.ALLOW
-            screen == InstagramScreen.COMMENTS_OR_DETAIL && allowChosenProfilePost ->
+            screen == InstagramScreen.COMMENTS_OR_DETAIL &&
+                (allowChosenProfilePost || allowCommentsAndPosts) ->
                 InstagramProtectionAction.ALLOW
             else -> actionFor(screen)
         }

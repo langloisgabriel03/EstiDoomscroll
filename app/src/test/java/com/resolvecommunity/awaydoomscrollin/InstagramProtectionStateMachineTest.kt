@@ -36,6 +36,15 @@ class InstagramProtectionStateMachineTest {
         assertEquals(InstagramProtectionAction.EXIT,
             machine.observe(InstagramScreen.COMMENTS_OR_DETAIL, 2).action)
     }
+    @Test fun keepFeedsOpenAllowsCommentsButStillExitsReels() {
+        val machine = InstagramProtectionStateMachine(allowCommentsAndPosts = true)
+        assertEquals(InstagramProtectionAction.ALLOW,
+            machine.observe(InstagramScreen.COMMENTS_OR_DETAIL, 2).action)
+        assertEquals(InstagramProtectionAction.EXIT,
+            machine.observe(InstagramScreen.REELS, 3).action)
+        assertEquals(InstagramProtectionAction.EXIT,
+            machine.observe(InstagramScreen.SAVED_COLLECTION, 4).action)
+    }
     @Test fun everySurfaceHasOneAuthoritativeAction() {
         val machine = InstagramProtectionStateMachine()
         for (screen in InstagramScreen.entries) {
