@@ -35,7 +35,7 @@ class AntiScrollService : AccessibilityService() {
         private const val YOUTUBE_PACKAGE = "com.google.android.youtube"
         private const val YOUTUBE_SOURCE_PATH_DEPTH = 24
         private const val INSTAGRAM_EXIT_TREE_QUIET_MS = 220L
-        private const val REELS_WAIT_SETTLE_MS = 2_000L
+        private const val REELS_WAIT_SETTLE_MS = 800L
         private const val REELS_WAIT_REMOVE_MS = 300L
         private const val INSTAGRAM_VIEWER_EXIT_RETRY_MS = 500L
         private const val DIRECT_MODAL_COVER_MAX_MS = 1_500L
@@ -581,7 +581,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         onInstagramOverlayTouched()
         // Not from inside the guard's own touch dispatch: showing the wait
         // screen removes that guard window.
-        mainHandler.post { onInstagramReelsBlocked() }
+        mainHandler.post { onInstagramReelsBlocked(userTap = true) }
     }
 
     /**
@@ -604,13 +604,14 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     }
 
     /**
-     * A Reel was blocked (Back dispatched) or the Reels tab was tapped. Shows
-     * the wait screen once; repeated events for the same encounter, and the
-     * short settle after "Never mind", only keep the normal block.
+     * A Reel was blocked (Back dispatched) or a guard was tapped. Shows the
+     * wait screen once; repeated events for the same encounter only keep the
+     * normal block. The short settle after "Never mind" applies only to
+     * automatic exits (a Reel still closing underneath), never to a tap.
      */
-    private fun onInstagramReelsBlocked() {
+    private fun onInstagramReelsBlocked(userTap: Boolean = false) {
         if (reelsWaitOverlay.isVisible ||
-            SystemClock.uptimeMillis() < reelsWaitSuppressedUntil ||
+            (!userTap && SystemClock.uptimeMillis() < reelsWaitSuppressedUntil) ||
             !instagramGuardActive()) return
         if (!reelsWaitOverlay.show()) {
             // Visible on the phone, where the log is not.
