@@ -8,7 +8,7 @@ import android.content.SharedPreferences
  * the user may open Instagram unguarded for [WINDOW_MINUTES].
  */
 object ReelsWaitConfig {
-    const val WAIT_SECONDS = 120
+    const val WAIT_SECONDS = 60
     const val WINDOW_MINUTES = 5
 
     const val WINDOW_MS = WINDOW_MINUTES * 60_000L
