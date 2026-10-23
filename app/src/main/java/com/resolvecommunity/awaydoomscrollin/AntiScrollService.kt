@@ -553,7 +553,11 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                         ProtectionPreferences.getMode(this, ProtectedApp.INSTAGRAM))
             },
             onReelsTabBlocked = ::onInstagramReelsGuardTapped,
-            onEntryGuardTap = ::onInstagramReelsGuardTapped
+            onEntryGuardTap = ::onInstagramReelsGuardTapped,
+            onCurtainTap = { screen ->
+                // Explore's suggested grid is Reels-heavy: same wait/game unlock.
+                if (screen == InstagramScreen.EXPLORE) onInstagramReelsGuardTapped()
+            }
         )
     }
 

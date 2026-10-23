@@ -44,10 +44,10 @@ class InstagramSurfacePolicyTest {
                 InstagramSurfacePolicy.needsCurtain(screen, keepFeedsOpen = false))
         }
     }
-    @Test fun keepFeedsOpenUncoversHomeAndExploreOnly() {
+    @Test fun keepFeedsOpenUncoversHomeOnly() {
         for (screen in InstagramScreen.entries) {
             assertEquals(screen.name, screen in setOf(
-                InstagramScreen.PROFILE, InstagramScreen.DIRECT_SHARED_MEDIA),
+                InstagramScreen.EXPLORE, InstagramScreen.PROFILE, InstagramScreen.DIRECT_SHARED_MEDIA),
                 InstagramSurfacePolicy.needsCurtain(screen, keepFeedsOpen = true))
         }
         // Reels are still exited, not curtained.

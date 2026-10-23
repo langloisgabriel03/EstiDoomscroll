@@ -44,7 +44,10 @@ internal class InstagramFeedOverlayController(
     // Reels Wait fork: a tap on the blocked Reels tab, or on any entry guard
     // (the Reels tab on main surfaces, Reel cards in DMs), opens the wait screen.
     private val onReelsTabBlocked: () -> Unit = onBlockedTouch,
-    private val onEntryGuardTap: () -> Unit = onBlockedTouch
+    private val onEntryGuardTap: () -> Unit = onBlockedTouch,
+    // Reels Wait fork: a tap (not a swipe) on a content curtain, with the
+    // curtain's screen. The Explore curtain uses it to open the wait screen.
+    private val onCurtainTap: (InstagramScreen) -> Unit = {}
 ) {
     companion object {
         private const val TAG = "InstagramOverlay"
@@ -1132,7 +1135,17 @@ internal class InstagramFeedOverlayController(
                         }
                     }
                     MotionEvent.ACTION_CANCEL -> { profileGesture = false }
-                    MotionEvent.ACTION_UP -> view.performClick()
+                    MotionEvent.ACTION_UP -> {
+                        val tap = !swipeIssued &&
+                            Math.hypot((event.rawX - startX).toDouble(),
+                                (event.rawY - startY).toDouble()) < dp(12)
+                        if (tap) {
+                            currentCopyKey?.substringBefore(':')
+                                ?.let { name -> InstagramScreen.entries.firstOrNull { it.name == name } }
+                                ?.let(onCurtainTap)
+                        }
+                        view.performClick()
+                    }
                 }
                 true
             }
@@ -1197,7 +1210,8 @@ internal class InstagramFeedOverlayController(
             }
             val detail = when (screen) {
                 InstagramScreen.HOME_FEED -> "Home feed is paused. Messages remain available."
-                InstagramScreen.EXPLORE -> "The suggested feed is paused. You can still search for accounts."
+                InstagramScreen.EXPLORE -> "The suggested feed is paused. Search still works.\n" +
+                    "Tap here to unlock it after a short wait."
                 InstagramScreen.PROFILE -> "Posts are hidden. Profile information remains available."
                 InstagramScreen.DIRECT_SHARED_MEDIA -> "Shared media gallery is paused. Messages remain available."
                 InstagramScreen.REELS -> ""

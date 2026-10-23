@@ -15,8 +15,10 @@ object ReelsWaitConfig {
     const val WINDOW_MS = WINDOW_MINUTES * 60_000L
 
     /**
-     * Keep the Instagram Home/Explore and YouTube Home/Subscriptions feeds
-     * visible; only Reels and Shorts stay blocked. Upstream covers the feeds.
+     * Keep the Instagram Home and YouTube Home/Subscriptions feeds visible;
+     * only Reels and Shorts stay blocked. Upstream covers the feeds. Instagram
+     * Explore (the suggested grid, also under keyword search) stays covered,
+     * and tapping its cover opens the wait screen.
      */
     const val KEEP_FEEDS_OPEN = true
 
