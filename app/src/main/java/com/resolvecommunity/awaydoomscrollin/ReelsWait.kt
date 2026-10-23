@@ -4,11 +4,12 @@ import android.content.SharedPreferences
 
 /**
  * Reels Wait fork: the single place to tune the wait timer. Instead of a hard
- * block, a blocked Instagram Reel shows a countdown of [WAIT_SECONDS]; after it
- * the user may open Instagram unguarded for [WINDOW_MINUTES].
+ * block, a blocked Instagram Reel shows a countdown of [WAIT_SECONDS]; after it,
+ * or after winning the mini-game shown with it, the user may open Instagram
+ * unguarded for [WINDOW_MINUTES]. Game rules live in UnlockChallengeLogic.kt.
  */
 object ReelsWaitConfig {
-    const val WAIT_SECONDS = 60
+    const val WAIT_SECONDS = 120
     const val WINDOW_MINUTES = 5
 
     const val WINDOW_MS = WINDOW_MINUTES * 60_000L

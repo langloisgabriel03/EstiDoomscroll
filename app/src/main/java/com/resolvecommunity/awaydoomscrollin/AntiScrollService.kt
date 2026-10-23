@@ -36,6 +36,7 @@ class AntiScrollService : AccessibilityService() {
         private const val YOUTUBE_SOURCE_PATH_DEPTH = 24
         private const val INSTAGRAM_EXIT_TREE_QUIET_MS = 220L
         private const val REELS_WAIT_SETTLE_MS = 2_000L
+        private const val REELS_WAIT_REMOVE_MS = 300L
         private const val INSTAGRAM_VIEWER_EXIT_RETRY_MS = 500L
         private const val DIRECT_MODAL_COVER_MAX_MS = 1_500L
         private const val PRECOVER_DRAW_HOLD_MS = 150L
@@ -565,7 +566,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
 
     private val reelsRelockCheck = Runnable {
         if (!instagramGuardActive()) return@Runnable
-        if (rootInActiveWindow?.packageName?.toString() != INSTAGRAM_PACKAGE) return@Runnable
+        if (instagramAppRoot() == null) return@Runnable
         Log.d(TAG, "REELS_WAIT_WINDOW_EXPIRED")
         updateInstagramStructuralNodeAccess(true)
         queueInstagramScan(0L)
@@ -576,6 +577,18 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         // Not from inside the guard's own touch dispatch: showing the wait
         // screen removes that guard window.
         mainHandler.post { onInstagramReelsBlocked() }
+    }
+
+    /**
+     * Instagram's root when it is the top app window. The wait screen is a
+     * focusable overlay, so rootInActiveWindow can be our own window while it
+     * closes.
+     */
+    private fun instagramAppRoot(): AccessibilityNodeInfo? = try {
+        windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }?.root
+            ?.takeIf { it.packageName?.toString() == INSTAGRAM_PACKAGE }
+    } catch (_: Exception) {
+        null
     }
 
     private fun instagramGuardActive(): Boolean {
@@ -609,9 +622,10 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private fun onReelsWaitDismissed() {
         Log.d(TAG, "REELS_WAIT_DISMISSED")
         reelsWaitSuppressedUntil = SystemClock.uptimeMillis() + REELS_WAIT_SETTLE_MS
-        if (rootInActiveWindow?.packageName?.toString() == INSTAGRAM_PACKAGE) {
+        if (instagramAppRoot() != null) {
             updateInstagramStructuralNodeAccess(true)
-            queueInstagramScan(0L)
+            // Give the closing wait window a moment to leave the active slot.
+            queueInstagramScan(REELS_WAIT_REMOVE_MS)
         }
     }
 
@@ -622,11 +636,11 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         hideInstagramProtection()
         mainHandler.removeCallbacks(reelsRelockCheck)
         mainHandler.postDelayed(reelsRelockCheck, ReelsUnlock.remainingMs(prefs) + 250L)
-        // Best effort: take the user straight to the Reels tab they asked for.
-        val root = rootInActiveWindow
-        if (root != null && root.packageName?.toString() == INSTAGRAM_PACKAGE) {
-            performInstagramTabAction(root, "clips_tab")
-        }
+        // Best effort: take the user straight to the Reels tab they asked for,
+        // once the wait window has gone.
+        mainHandler.postDelayed({
+            instagramAppRoot()?.let { performInstagramTabAction(it, "clips_tab") }
+        }, REELS_WAIT_REMOVE_MS)
     }
     private val youtubeOverlay by lazy {
         YouTubeProtectionOverlayController(
