@@ -11,11 +11,19 @@ class ReelsUnlockTest {
     private val until = ReelsUnlock.unlockedUntil(start, window)
 
     @Test
-    fun `default config is a 30 second wait and a 5 minute window`() {
-        assertEquals(30, ReelsWaitConfig.WAIT_SECONDS)
+    fun `default config is a 2 minute wait and a 5 minute window`() {
+        assertEquals(120, ReelsWaitConfig.WAIT_SECONDS)
         assertEquals(5, ReelsWaitConfig.WINDOW_MINUTES)
         assertEquals(300_000L, ReelsWaitConfig.WINDOW_MS)
         assertEquals(start + 300_000L, ReelsUnlock.unlockedUntil(start))
+    }
+
+    @Test
+    fun `countdown label is minutes and seconds`() {
+        assertEquals("2:00", ReelsWaitConfig.formatCountdown(120L))
+        assertEquals("1:05", ReelsWaitConfig.formatCountdown(65L))
+        assertEquals("0:09", ReelsWaitConfig.formatCountdown(9L))
+        assertEquals("0:00", ReelsWaitConfig.formatCountdown(-3L))
     }
 
     @Test

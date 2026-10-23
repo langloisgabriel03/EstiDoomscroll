@@ -13,6 +13,7 @@ import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -32,7 +33,7 @@ internal class ReelsWaitOverlay(
 ) {
     companion object {
         private const val TAG = "ReelsWaitOverlay"
-        private const val TICK_MS = 250L
+        private const val TICK_MS = 500L
         private const val INSTAGRAM_PACKAGE = "com.instagram.android"
     }
 
@@ -51,7 +52,7 @@ internal class ReelsWaitOverlay(
             if (root == null) return
             // Nothing else reports leaving Instagram while the screen is up:
             // the service only receives events from the protected apps.
-            val foreground = service.rootInActiveWindow?.packageName?.toString()
+            val foreground = foregroundAppPackage()
             if (foreground != null && foreground != INSTAGRAM_PACKAGE) {
                 dismiss()
                 return
@@ -59,6 +60,21 @@ internal class ReelsWaitOverlay(
             render()
             handler.postDelayed(this, TICK_MS)
         }
+    }
+
+    /**
+     * The app window underneath. Not rootInActiveWindow: once this screen is
+     * touched (or right after a tap on a guard window) the active window is our
+     * own overlay, which would read as "left Instagram" and close the screen.
+     */
+    private fun foregroundAppPackage(): String? {
+        val apps = try {
+            service.windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+        } catch (_: Exception) {
+            return null
+        }
+        val window = apps.firstOrNull { it.isFocused } ?: apps.firstOrNull { it.isActive }
+        return window?.root?.packageName?.toString()
     }
 
     /** Returns false when the screen is already visible or cannot be added. */
@@ -100,7 +116,7 @@ internal class ReelsWaitOverlay(
 
     private fun render() {
         val left = ((deadline - SystemClock.uptimeMillis()).coerceAtLeast(0L) + 999L) / 1000L
-        countdown?.text = if (left > 0L) left.toString() else "Ready"
+        countdown?.text = if (left > 0L) ReelsWaitConfig.formatCountdown(left) else "Ready"
         unlockButton?.visibility = if (left > 0L) View.INVISIBLE else View.VISIBLE
     }
 

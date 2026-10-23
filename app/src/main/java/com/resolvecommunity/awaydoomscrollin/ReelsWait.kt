@@ -8,7 +8,7 @@ import android.content.SharedPreferences
  * the user may open Instagram unguarded for [WINDOW_MINUTES].
  */
 object ReelsWaitConfig {
-    const val WAIT_SECONDS = 30
+    const val WAIT_SECONDS = 120
     const val WINDOW_MINUTES = 5
 
     const val WINDOW_MS = WINDOW_MINUTES * 60_000L
@@ -18,6 +18,12 @@ object ReelsWaitConfig {
      * Every caller asks here instead of reading [WAIT_SECONDS] directly.
      */
     fun waitSeconds(): Int = WAIT_SECONDS
+
+    /** Countdown label: "2:00", "1:05", "0:09". */
+    fun formatCountdown(seconds: Long): String {
+        val clamped = seconds.coerceAtLeast(0L)
+        return "%d:%02d".format(clamped / 60, clamped % 60)
+    }
 }
 
 /**
