@@ -28,9 +28,8 @@ import android.widget.TextView
  *
  * Uses TYPE_ACCESSIBILITY_OVERLAY from the enabled accessibility service, so it
  * needs no SYSTEM_ALERT_WINDOW permission and is not subject to Android's
- * background activity-start limits. The window is focusable so the games can
- * use the keyboard; Back acts as "Never mind", and leaving Instagram dismisses
- * the screen.
+ * background activity-start limits. The window only becomes focusable when a
+ * game's text box is tapped; leaving Instagram dismisses the screen.
  */
 internal class ReelsWaitOverlay(
     private val service: AccessibilityService,
@@ -41,6 +40,9 @@ internal class ReelsWaitOverlay(
         private const val TAG = "ReelsWaitOverlay"
         private const val TICK_MS = 500L
         private const val INSTAGRAM_PACKAGE = "com.instagram.android"
+        // Window lists settle after the screen is added; do not judge "left
+        // Instagram" from the first frames.
+        private const val LEAVE_CHECK_GRACE_MS = 1_000L
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -51,6 +53,12 @@ internal class ReelsWaitOverlay(
     private var unlockButton: TextView? = null
     private var challenge: UnlockChallenge? = null
     private var deadline = 0L
+    private var shownAt = 0L
+    private var params: WindowManager.LayoutParams? = null
+
+    init {
+        ui.onNeedKeyboard = ::enableKeyboard
+    }
 
     val isVisible: Boolean
         get() = root != null
@@ -60,8 +68,10 @@ internal class ReelsWaitOverlay(
             if (root == null) return
             // Nothing else reports leaving Instagram while the screen is up:
             // the service only receives events from the protected apps.
-            val foreground = topAppPackage()
-            if (foreground != null && foreground != INSTAGRAM_PACKAGE) {
+            val other = otherAppOnTop()
+            if (other != null && SystemClock.uptimeMillis() - shownAt >= LEAVE_CHECK_GRACE_MS) {
+                Log.d(TAG, "Left Instagram for $other")
+                toast("Reels Wait: closed, you left Instagram")
                 dismiss()
                 return
             }
@@ -71,33 +81,57 @@ internal class ReelsWaitOverlay(
     }
 
     /**
-     * The top-most app window. Not rootInActiveWindow, and not input focus:
-     * this screen is our own focusable overlay, which would read as "left
-     * Instagram" and close itself.
+     * Another app's package when one is visible and Instagram is not, else
+     * null. Not rootInActiveWindow: once this screen is touched the active
+     * window is our own overlay, which would read as "left Instagram". A
+     * window list without any app window (fully covered) means stay.
      */
-    private fun topAppPackage(): String? = try {
-        service.windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
-            ?.root?.packageName?.toString()
-    } catch (_: Exception) {
-        null
+    private fun otherAppOnTop(): String? {
+        val apps = try {
+            service.windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+                .mapNotNull { it.root?.packageName?.toString() }
+        } catch (_: Exception) {
+            return null
+        }
+        if (apps.isEmpty() || INSTAGRAM_PACKAGE in apps) return null
+        return apps.first()
+    }
+
+    /** Lets the window take key focus so a game's text box can use the keyboard. */
+    private fun enableKeyboard() {
+        val view = root ?: return
+        val current = params ?: return
+        if (current.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE == 0) return
+        current.flags = current.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+        try { windowManager?.updateViewLayout(view, current) } catch (e: Exception) {
+            Log.w(TAG, "Keyboard focus failed", e)
+        }
+    }
+
+    private fun toast(message: String) {
+        android.widget.Toast.makeText(service, message, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     /** Returns false when the screen is already visible or cannot be added. */
     fun show(): Boolean {
         if (root != null) return false
         val game = UnlockChallenges.random()
-        val view = buildView(game)
         return try {
-            windowManager?.addView(view, layoutParams()) ?: return false
+            val view = buildView(game)
+            val windowParams = layoutParams()
+            windowManager?.addView(view, windowParams) ?: return false
             root = view
+            params = windowParams
             challenge = game
-            deadline = SystemClock.uptimeMillis() + ReelsWaitConfig.waitSeconds() * 1000L
+            shownAt = SystemClock.uptimeMillis()
+            deadline = shownAt + ReelsWaitConfig.waitSeconds() * 1000L
             render()
             handler.postDelayed(tick, TICK_MS)
             true
         } catch (e: Exception) {
             game.dispose()
             Log.w(TAG, "Wait screen could not be added", e)
+            toast("Reels Wait: wait screen failed (${e.javaClass.simpleName}: ${e.message})")
             false
         }
     }
@@ -123,6 +157,7 @@ internal class ReelsWaitOverlay(
         unlockButton = null
         challenge?.dispose()
         challenge = null
+        params = null
         handler.removeCallbacks(tick)
         service.getSystemService(InputMethodManager::class.java)
             ?.hideSoftInputFromWindow(view.windowToken, 0)
@@ -177,10 +212,10 @@ internal class ReelsWaitOverlay(
         }
         return object : FrameLayout(service) {
             override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-                if (event.keyCode == KeyEvent.KEYCODE_BACK) {
-                    if (event.action == KeyEvent.ACTION_UP) dismiss()
-                    return true
-                }
+                // Swallow Back once the window has key focus: the service's own
+                // Reel exit sends Back too, which must not close this screen.
+                // "Never mind" is the way out.
+                if (event.keyCode == KeyEvent.KEYCODE_BACK) return true
                 return super.dispatchKeyEvent(event)
             }
         }.apply {
@@ -199,8 +234,10 @@ internal class ReelsWaitOverlay(
         WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-        // Focusable (no FLAG_NOT_FOCUSABLE) so the games can use the keyboard.
-        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+        // Starts unfocusable, like the original wait screen; enableKeyboard()
+        // drops FLAG_NOT_FOCUSABLE when a game's text box is tapped.
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         PixelFormat.TRANSLUCENT
     ).apply {
         gravity = Gravity.TOP or Gravity.START

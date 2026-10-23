@@ -61,6 +61,13 @@ internal object UnlockChallenges {
 
 /** Shared look for the wait screen and its games. */
 internal class ChallengeUi(val context: Context) {
+    /**
+     * Set by the wait screen: makes its window focusable. It starts
+     * unfocusable so it never takes key focus (and Back) from Instagram until
+     * a text box is tapped.
+     */
+    var onNeedKeyboard: () -> Unit = {}
+
     val dim = Color.argb(180, 255, 255, 255)
     val green = Color.rgb(110, 231, 150)
     val red = Color.rgb(255, 107, 107)
@@ -88,7 +95,12 @@ internal class ChallengeUi(val context: Context) {
             setOnClickListener { onClick() }
         }
 
+    @SuppressLint("ClickableViewAccessibility")
     fun input(hint: String, inputType: Int) = EditText(context).apply {
+        setOnTouchListener { field, event ->
+            if (event.actionMasked == MotionEvent.ACTION_UP) showKeyboard(field as EditText)
+            false
+        }
         this.hint = hint
         this.inputType = inputType
         textSize = 17f
@@ -112,6 +124,7 @@ internal class ChallengeUi(val context: Context) {
     ).apply { topMargin = top }
 
     fun showKeyboard(field: EditText) {
+        onNeedKeyboard()
         field.post {
             field.requestFocus()
             context.getSystemService(InputMethodManager::class.java)
@@ -180,7 +193,7 @@ internal class TypingChallenge : UnlockChallenge {
             gravity = Gravity.START
             setLineSpacing(0f, 1.25f)
         }
-        val field = ui.input("Start typing…",
+        val field = ui.input("Tap here and start typing…",
             // Visible-password turns off autocorrect, so every letter is typed.
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
@@ -237,7 +250,6 @@ internal class TypingChallenge : UnlockChallenge {
         box.addView(field, ui.params(top = ui.dp(14)))
         box.addView(stats, ui.params(top = ui.dp(8)))
         render("")
-        ui.showKeyboard(field)
         return box
     }
 }
@@ -252,7 +264,7 @@ internal class MathChallenge : UnlockChallenge {
         var solvedCount = 0
         val question = ui.text("", 34f, style = Typeface.BOLD)
         val progress = ui.text("", 13f, ui.dim)
-        val field = ui.input("Answer", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED)
+        val field = ui.input("Tap to answer", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED)
             .apply {
                 gravity = Gravity.CENTER
                 imeOptions = EditorInfo.IME_ACTION_DONE
@@ -289,7 +301,6 @@ internal class MathChallenge : UnlockChallenge {
         box.addView(ui.button("Check", filled = false) { check() }, ui.params(top = ui.dp(10)))
         box.addView(progress, ui.params(top = ui.dp(8)))
         render()
-        ui.showKeyboard(field)
         return box
     }
 }
