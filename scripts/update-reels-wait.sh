@@ -12,17 +12,22 @@ command -v gh >/dev/null || { echo "Install gh first:  pkg install gh"; exit 1; 
 gh auth status >/dev/null 2>&1 || { echo "Log in first:  gh auth login"; exit 1; }
 [ -d "$HOME/storage/downloads" ] || { echo "Run termux-setup-storage, tap Allow, then try again."; exit 1; }
 
-RUN_ID=$(gh run list -R "$REPO" -w build-debug.yml -b "$BRANCH" -s success -L 1 \
-  --json databaseId -q '.[0].databaseId')
-[ -n "$RUN_ID" ] || { echo "No successful build found."; exit 1; }
-echo "Latest build: run $RUN_ID"
+read -r RUN_ID RUN_NUMBER < <(gh run list -R "$REPO" -w build-debug.yml -b "$BRANCH" -s success -L 1 \
+  --json databaseId,number -q '.[0] | "\(.databaseId) \(.number)"')
+[ -n "${RUN_ID:-}" ] || { echo "No successful build found."; exit 1; }
+echo "Latest build: #$RUN_NUMBER (run $RUN_ID)"
 
 rm -rf "$WORK"
 gh run download "$RUN_ID" -R "$REPO" -D "$WORK"
 APK=$(find "$WORK" -name '*.apk' | head -n 1)
 [ -n "$APK" ] || { echo "The build has no APK."; exit 1; }
+rm -f "$DEST"
 cp "$APK" "$DEST"
-echo "Copied to Downloads/reels-wait.apk"
+echo "Copied to Downloads/reels-wait.apk ($(du -h "$DEST" | cut -f1))"
+if command -v aapt >/dev/null; then
+  aapt dump badging "$DEST" | grep -o "versionName='[^']*'" || true
+fi
+echo "After installing, Settings > Apps > Reels Wait should show version ending in .$RUN_NUMBER"
 
 # Opens Android's installer. If nothing appears, open Files > Downloads >
 # reels-wait.apk instead (or allow Termux to install apps when asked).
