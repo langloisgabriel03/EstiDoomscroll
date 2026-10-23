@@ -30,6 +30,15 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Reuse one debug signing key across runs so a new APK installs over the
+      # previous one instead of failing with "App not installed". The first run
+      # without a cached key generates it; later runs restore the same file.
+      - name: Restore Debug Signing Key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: reels-wait-debug-keystore-v1
+
       - name: Grant Execute Permission for Gradle Wrapper
         run: chmod +x gradlew
 
