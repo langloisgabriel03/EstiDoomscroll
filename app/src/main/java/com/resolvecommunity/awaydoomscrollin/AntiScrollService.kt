@@ -598,7 +598,6 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
 
     private fun instagramGuardActive(): Boolean {
         if (!ProtectionPreferences.isEnabled(this, ProtectedApp.INSTAGRAM)) return false
-        if (reelsWaitOverlay.isVisible) return false
         val prefs = getSharedPreferences(ProtectionPreferences.PREFS_NAME, Context.MODE_PRIVATE)
         return !ReelsUnlock.isUnlocked(prefs)
     }
@@ -620,17 +619,34 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             return
         }
         Log.d(TAG, "REELS_WAIT_SHOWN")
-        // The full-screen wait window is the protection now. Removing the
-        // feed curtains also keeps them from being re-added above it.
-        hideInstagramProtection()
+        // Instagram protection is frozen under the wait window (see
+        // instagramFrozenByWaitScreen): its curtains and guards stay mounted
+        // below it, so neither opening nor "Never mind" exposes the feed for a
+        // frame. Only an unlock removes them. The exit that led here is done.
+        cancelInstagramExit()
+        mainHandler.removeCallbacks(instagramViewerExitRetry)
+        mainHandler.removeCallbacks(instagramScan)
+        // The full-screen black slip cover belongs to that exit; it is under
+        // the wait window now and must not outlive it.
+        instagramOverlay.hideReelsSlipCover()
+        reelsSlipCoverUntil = 0L
+        reelsSlipCoverExit = false
     }
+
+    /**
+     * While the wait screen is up nothing Instagram does reaches the screen.
+     * Scans and events are skipped so no curtain or guard is removed, moved or
+     * re-added above the wait window.
+     */
+    private fun instagramFrozenByWaitScreen(): Boolean = reelsWaitOverlay.isVisible
 
     private fun onReelsWaitDismissed() {
         Log.d(TAG, "REELS_WAIT_DISMISSED")
         reelsWaitSuppressedUntil = SystemClock.uptimeMillis() + REELS_WAIT_SETTLE_MS
         if (instagramAppRoot() != null) {
             updateInstagramStructuralNodeAccess(true)
-            // Give the closing wait window a moment to leave the active slot.
+            // The curtains never left; refresh them once the closing wait
+            // window has left the active slot.
             queueInstagramScan(REELS_WAIT_REMOVE_MS)
         }
     }
@@ -1125,6 +1141,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private fun dispatchAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || !AccessibilityConsent.isAccepted(this)) return
         maybeRecordHeartbeat()
+        if (event.packageName?.toString() == INSTAGRAM_PACKAGE && instagramFrozenByWaitScreen()) return
 
         val reportedPackage = event.packageName?.toString()
         if (ProtectionFlightRecorder.ENABLED && reportedPackage in setOf(
@@ -2465,6 +2482,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     }
 
     private fun scanInstagram(event: AccessibilityEvent?) {
+        if (instagramFrozenByWaitScreen()) return
         val scanNow = SystemClock.uptimeMillis()
         if (directConversationEntryGuardUntil != 0L &&
             scanNow >= directConversationEntryGuardUntil) {
