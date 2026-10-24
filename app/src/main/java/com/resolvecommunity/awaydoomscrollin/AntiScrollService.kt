@@ -2712,7 +2712,11 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             releaseVerifiedInstagramInbox(root)) return
         val keepVerifiedHome = InstagramSurfacePolicy.shouldKeepVerifiedHome(
             currentScreen = instagramStateMachine.currentScreen,
-            homeCurtainVisible = instagramOverlay.visibleHomeBounds() != null,
+            // Reels Wait fork: with the Home feed open there is no curtain to
+            // vouch for Home, so the verified Home state alone holds it: an
+            // embedded video's player rebuild must not read as a Reel launch.
+            homeCurtainVisible = instagramOverlay.visibleHomeBounds() != null ||
+                ReelsWaitConfig.KEEP_FEEDS_OPEN,
             sameWindow = instagramStateMachine.currentWindowId == root.windowId,
             hasFreshUserInput = scanNow - lastInstagramUserInputAt in
                 0L..INSTAGRAM_USER_LAUNCH_GRACE_MS

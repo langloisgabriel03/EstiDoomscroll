@@ -205,6 +205,12 @@ internal class ReelsWaitOverlay(
         column.addView(card, ui.params(top = ui.dp(20)))
 
         column.addView(ui.button("Never mind", filled = true) { dismiss() }, ui.params(top = ui.dp(20)))
+        // A sure way out: the home gesture may not reach past a full-screen
+        // overlay on every phone.
+        column.addView(ui.button("Leave Instagram", filled = false) {
+            dismiss()
+            service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+        }, ui.params(top = ui.dp(12)))
         @Suppress("DEPRECATION")
         val version = runCatching {
             service.packageManager.getPackageInfo(service.packageName, 0).versionName
