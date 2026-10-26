@@ -218,7 +218,67 @@ class UnlockChallengeLogicTest {
     }
 
     @Test
+    fun `2048 merges each pair once per move`() {
+        val game = Game2048(Random(1))
+        assertEquals(listOf(4, 4, 0, 0), game.slide(listOf(2, 2, 2, 2)))
+        assertEquals(listOf(4, 4, 0, 0), game.slide(listOf(2, 2, 4, 0)))
+        assertEquals(listOf(8, 8, 0, 0), game.slide(listOf(4, 4, 8, 0)))
+        assertEquals(listOf(2, 4, 2, 0), game.slide(listOf(0, 2, 4, 2)))
+        assertEquals(listOf(4, 0, 0, 0), game.slide(listOf(2, 0, 0, 2)))
+    }
+
+    @Test
+    fun `2048 starts with two tiles and adds one per real move`() {
+        val game = Game2048(Random(2))
+        assertEquals(2, game.cells.count { it != 0 })
+        game.cells.fill(0)
+        game.cells[0] = 2
+        // Already against the left wall: nothing moves, nothing is added.
+        assertFalse(game.move(Game2048.Direction.LEFT))
+        assertEquals(1, game.cells.count { it != 0 })
+        assertTrue(game.move(Game2048.Direction.RIGHT))
+        assertEquals(2, game.cells[3])
+        assertEquals(2, game.cells.count { it != 0 })
+    }
+
+    @Test
+    fun `2048 moves in all four directions and scores merges`() {
+        val game = Game2048(Random(3))
+        game.cells.fill(0)
+        game.cells[0] = 4
+        game.cells[12] = 4
+        assertTrue(game.move(Game2048.Direction.DOWN))
+        assertEquals(8, game.cells[12])
+        assertEquals(8, game.score)
+        game.cells.fill(0)
+        game.cells[15] = 16
+        assertTrue(game.move(Game2048.Direction.UP))
+        assertEquals(16, game.cells[3])
+    }
+
+    @Test
+    fun `2048 is won at the target and over when nothing can move`() {
+        val game = Game2048(Random(4))
+        game.cells.fill(0)
+        game.cells[0] = Game2048.TARGET / 2
+        game.cells[1] = Game2048.TARGET / 2
+        assertFalse(game.won)
+        game.move(Game2048.Direction.LEFT)
+        assertTrue(game.won)
+        assertEquals(Game2048.TARGET, game.bestTile)
+
+        // A checkerboard of 2s and 4s has no equal neighbours.
+        for (i in game.cells.indices) game.cells[i] = if ((i / 4 + i % 4) % 2 == 0) 2 else 4
+        assertTrue(game.over)
+        game.cells[1] = 2
+        assertFalse(game.over)
+        game.restart()
+        assertFalse(game.over)
+        assertEquals(0, game.score)
+    }
+
+    @Test
     fun `every game is registered`() {
-        assertEquals(5, UnlockChallenges.count)
+        assertEquals(6, UnlockChallenges.count)
     }
 }

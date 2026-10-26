@@ -55,7 +55,8 @@ internal object UnlockChallenges {
         ::MathChallenge,
         ::HoldChallenge,
         ::FlappyChallenge,
-        ::RushHourChallenge
+        ::RushHourChallenge,
+        ::Game2048Challenge
     )
 
     val count: Int

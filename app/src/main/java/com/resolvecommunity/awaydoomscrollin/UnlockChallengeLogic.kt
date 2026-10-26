@@ -333,3 +333,101 @@ object RushHourLevels {
 
     fun random(random: Random = Random.Default): Pair<String, Int> = all.random(random)
 }
+
+/**
+ * 2048: swipe to slide every tile; two equal tiles that meet merge into their
+ * sum, once per move. Each move that changes the board adds a 2 (or, 1 time in
+ * 10, a 4). Reaching [TARGET] unlocks.
+ */
+class Game2048(private val random: Random = Random.Default) {
+    companion object {
+        const val SIZE = 4
+        const val TARGET = 512
+    }
+
+    enum class Direction { LEFT, RIGHT, UP, DOWN }
+
+    /** Row-major, 0 for an empty cell. */
+    val cells = IntArray(SIZE * SIZE)
+    var score = 0
+        private set
+
+    val won: Boolean
+        get() = cells.any { it >= TARGET }
+
+    val bestTile: Int
+        get() = cells.maxOrNull() ?: 0
+
+    /** No empty cell and no two equal neighbours: nothing can move. */
+    val over: Boolean
+        get() = cells.none { it == 0 } && (0 until SIZE).none { r ->
+            (0 until SIZE).any { c ->
+                val v = cells[r * SIZE + c]
+                (c + 1 < SIZE && cells[r * SIZE + c + 1] == v) ||
+                    (r + 1 < SIZE && cells[(r + 1) * SIZE + c] == v)
+            }
+        }
+
+    init {
+        restart()
+    }
+
+    fun restart() {
+        cells.fill(0)
+        score = 0
+        spawn()
+        spawn()
+    }
+
+    /** Slides the board; returns false (and adds nothing) when nothing moved. */
+    fun move(direction: Direction): Boolean {
+        var moved = false
+        for (line in 0 until SIZE) {
+            val indices = lineIndices(direction, line)
+            val values = indices.map { cells[it] }
+            val merged = slide(values)
+            if (merged != values) {
+                moved = true
+                indices.forEachIndexed { i, index -> cells[index] = merged[i] }
+            }
+        }
+        if (moved) spawn()
+        return moved
+    }
+
+    /** Cell indices of one row/column, ordered from the side tiles slide toward. */
+    private fun lineIndices(direction: Direction, line: Int): List<Int> = (0 until SIZE).map { i ->
+        when (direction) {
+            Direction.LEFT -> line * SIZE + i
+            Direction.RIGHT -> line * SIZE + (SIZE - 1 - i)
+            Direction.UP -> i * SIZE + line
+            Direction.DOWN -> (SIZE - 1 - i) * SIZE + line
+        }
+    }
+
+    /** One line toward index 0: compact, merge equal pairs once, compact. */
+    internal fun slide(values: List<Int>): List<Int> {
+        val tiles = values.filter { it != 0 }
+        val out = mutableListOf<Int>()
+        var i = 0
+        while (i < tiles.size) {
+            if (i + 1 < tiles.size && tiles[i] == tiles[i + 1]) {
+                val sum = tiles[i] * 2
+                out += sum
+                score += sum
+                i += 2
+            } else {
+                out += tiles[i]
+                i++
+            }
+        }
+        while (out.size < SIZE) out += 0
+        return out
+    }
+
+    private fun spawn() {
+        val empty = cells.indices.filter { cells[it] == 0 }
+        if (empty.isEmpty()) return
+        cells[empty.random(random)] = if (random.nextInt(10) == 0) 4 else 2
+    }
+}
