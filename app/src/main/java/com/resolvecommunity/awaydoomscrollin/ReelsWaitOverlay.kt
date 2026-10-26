@@ -87,12 +87,16 @@ internal class ReelsWaitOverlay(
      * window list without any app window (fully covered) means stay.
      */
     private fun otherAppOnTop(): String? {
-        val apps = try {
+        val appWindows = try {
             service.windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
-                .mapNotNull { it.root?.packageName?.toString() }
         } catch (_: Exception) {
             return null
         }
+        // The focused app is the clearest signal (this window is unfocusable
+        // unless a game's text box is in use).
+        val focused = appWindows.firstOrNull { it.isFocused }?.root?.packageName?.toString()
+        if (focused != null && focused != INSTAGRAM_PACKAGE) return focused
+        val apps = appWindows.mapNotNull { it.root?.packageName?.toString() }
         if (apps.isEmpty() || INSTAGRAM_PACKAGE in apps) return null
         return apps.first()
     }

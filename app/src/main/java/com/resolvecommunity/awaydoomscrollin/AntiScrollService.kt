@@ -578,6 +578,15 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     }
 
     private fun onInstagramReelsGuardTapped() {
+        val foreground = focusedNonOverlayPackage()
+        if (foreground != null && foreground != INSTAGRAM_PACKAGE) {
+            // A guard outlived Instagram (it was frozen under the wait screen
+            // when the user left). It is sitting over another app: remove it,
+            // never open the wait screen there.
+            Log.d(TAG, "REELS_WAIT_STALE_GUARD foreground=$foreground")
+            suspendInstagramProtection()
+            return
+        }
         onInstagramOverlayTouched()
         // Not from inside the guard's own touch dispatch: showing the wait
         // screen removes that guard window.
@@ -609,6 +618,9 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
      * automatic exits (a Reel still closing underneath), never to a tap.
      */
     private fun onInstagramReelsBlocked(userTap: Boolean = false) {
+        // Never over another app (null = window list mid-transition).
+        val foreground = focusedNonOverlayPackage()
+        if (foreground != null && foreground != INSTAGRAM_PACKAGE) return
         if (reelsWaitOverlay.isVisible ||
             (!userTap && SystemClock.uptimeMillis() < reelsWaitSuppressedUntil) ||
             !instagramGuardActive()) return
@@ -648,6 +660,12 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             // The curtains never left; refresh them once the closing wait
             // window has left the active slot.
             queueInstagramScan(REELS_WAIT_REMOVE_MS)
+        } else {
+            // Left Instagram while frozen: no Instagram event will come to
+            // retire its guards and curtains, so remove them now, as leaving
+            // Instagram normally does. Otherwise they stay over other apps.
+            suspendInstagramProtection()
+            trackPackageTransition("")
         }
     }
 
