@@ -2825,11 +2825,20 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             root,
             directLaunchPending = scanNow < directReelLaunchPendingUntil)
         logSlowInstagramStage("fast-viewer", stageStarted)
-        if (fastReelsViewer && !keepVerifiedHome) {
+        // Reels Wait fork: comments opened on a Home-feed video sit over that
+        // video's player, which reads like a Reel. With the feed open, a
+        // comment sheet over verified Home is not a Reel. Checked only when a
+        // Reel is suspected, as the sheet probe walks every window.
+        val commentsOverHome by lazy {
+            ReelsWaitConfig.KEEP_FEEDS_OPEN &&
+                instagramStateMachine.currentScreen == InstagramScreen.HOME_FEED &&
+                hasFastCommentSheet(root)
+        }
+        if (fastReelsViewer && !keepVerifiedHome && !commentsOverHome) {
             exitBlockedViewer(root, instagramWindowBounds(root), InstagramScreen.REELS)
             return
         }
-        if (hasFastReelPreview(root) && !keepVerifiedHome) {
+        if (hasFastReelPreview(root) && !keepVerifiedHome && !commentsOverHome) {
             exitBlockedViewer(root, instagramWindowBounds(root), InstagramScreen.REELS)
             return
         }
@@ -3144,6 +3153,10 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             returnedToStandardHome -> InstagramScreen.HOME_FEED
             classifiedScreen == InstagramScreen.REELS && keepVerifiedHome -> {
                 Log.d(TAG, "IG_HOME_PLAYER_MUTATION_IGNORED window=${root.windowId}")
+                InstagramScreen.HOME_FEED
+            }
+            classifiedScreen == InstagramScreen.REELS && commentsOverHome -> {
+                Log.d(TAG, "IG_HOME_COMMENTS_KEPT window=${root.windowId}")
                 InstagramScreen.HOME_FEED
             }
             else -> classifiedScreen
