@@ -65,7 +65,64 @@ class UnlockChallengeLogicTest {
     }
 
     @Test
+    fun `flappy waits for the first tap`() {
+        val game = FlappyGame(Random(1))
+        val startY = game.birdY
+        game.step(1f)
+        assertEquals(FlappyGame.State.READY, game.state)
+        assertEquals(startY, game.birdY, 0f)
+        game.flap()
+        assertEquals(FlappyGame.State.PLAYING, game.state)
+        assertEquals(FlappyGame.FLAP_VELOCITY, game.velocity, 0f)
+    }
+
+    @Test
+    fun `flappy falls to the ground without taps and retries on the next tap`() {
+        val game = FlappyGame(Random(1))
+        game.flap()
+        repeat(600) { game.step(1f / 60f) }
+        assertEquals(FlappyGame.State.DEAD, game.state)
+        game.flap()
+        assertEquals(FlappyGame.State.READY, game.state)
+        assertEquals(0, game.score)
+    }
+
+    @Test
+    fun `flappy crashes into a pipe`() {
+        val game = FlappyGame(Random(1))
+        game.flap()
+        game.pipes.clear()
+        // A pipe right at the bird with its gap far above it.
+        game.pipes += FlappyGame.Pipe(FlappyGame.BIRD_X - 10f, gapTop = 0f)
+        game.birdY = 300f
+        game.velocity = 0f
+        game.step(1f / 60f)
+        assertEquals(FlappyGame.State.DEAD, game.state)
+    }
+
+    @Test
+    fun `flappy is winnable on every level`() {
+        // A simple autopilot aims for the middle of the next gap. If it can
+        // win every seed, the pipes never ask for something impossible.
+        for (seed in 1..30) {
+            val game = FlappyGame(Random(seed))
+            game.flap()
+            var seconds = 0f
+            while (game.state == FlappyGame.State.PLAYING && seconds < 120f) {
+                val next = game.pipes.first {
+                    it.x + FlappyGame.PIPE_WIDTH >= FlappyGame.BIRD_X - FlappyGame.BIRD_RADIUS
+                }
+                if (game.birdY > next.gapTop + FlappyGame.GAP / 2 + 15f && game.velocity >= 0f) game.flap()
+                game.step(1f / 60f)
+                seconds += 1f / 60f
+            }
+            assertEquals("seed $seed", FlappyGame.State.WON, game.state)
+            assertEquals(FlappyGame.PIPES_TO_WIN, game.score)
+        }
+    }
+
+    @Test
     fun `every game is registered`() {
-        assertEquals(3, UnlockChallenges.count)
+        assertEquals(4, UnlockChallenges.count)
     }
 }

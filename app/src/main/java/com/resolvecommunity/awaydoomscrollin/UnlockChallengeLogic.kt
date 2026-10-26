@@ -84,3 +84,115 @@ object HoldCheck {
 
     fun isDone(heldMs: Long): Boolean = heldMs >= HOLD_SECONDS * 1000L
 }
+
+/**
+ * Flappy Bird clone: tap to flap through [PIPES_TO_WIN] pipes in one run.
+ * Logical units on a [WIDTH] x [HEIGHT] board; the view only scales and draws.
+ */
+class FlappyGame(private val random: Random = Random.Default) {
+    companion object {
+        const val WIDTH = 360f
+        const val HEIGHT = 480f
+        const val GROUND = 440f
+        const val BIRD_X = 90f
+        const val BIRD_RADIUS = 12f
+        const val GRAVITY = 1400f
+        const val FLAP_VELOCITY = -420f
+        const val MAX_FALL_VELOCITY = 600f
+        const val PIPE_WIDTH = 56f
+        const val GAP = 140f
+        const val PIPE_SPEED = 140f
+        const val PIPE_SPACING = 200f
+        const val GAP_MARGIN = 50f
+        const val PIPES_TO_WIN = 10
+
+        /** Longest step simulated at once, so a stalled frame cannot tunnel through a pipe. */
+        private const val MAX_STEP_SECONDS = 1f / 30f
+    }
+
+    enum class State { READY, PLAYING, DEAD, WON }
+
+    class Pipe(var x: Float, val gapTop: Float) {
+        var passed = false
+        val gapBottom: Float
+            get() = gapTop + GAP
+    }
+
+    var state = State.READY
+        private set
+    var birdY = 0f
+        internal set
+    var velocity = 0f
+        internal set
+    var score = 0
+        private set
+    val pipes = mutableListOf<Pipe>()
+
+    init {
+        reset()
+    }
+
+    /** Tap: start, flap, or (after a crash) get ready for another run. */
+    fun flap() {
+        when (state) {
+            State.READY -> {
+                state = State.PLAYING
+                velocity = FLAP_VELOCITY
+            }
+            State.PLAYING -> velocity = FLAP_VELOCITY
+            State.DEAD -> reset()
+            State.WON -> Unit
+        }
+    }
+
+    fun step(seconds: Float) {
+        var left = seconds.coerceAtLeast(0f)
+        while (left > 0f && state == State.PLAYING) {
+            val dt = minOf(left, MAX_STEP_SECONDS)
+            advance(dt)
+            left -= dt
+        }
+    }
+
+    private fun advance(dt: Float) {
+        velocity = (velocity + GRAVITY * dt).coerceAtMost(MAX_FALL_VELOCITY)
+        birdY += velocity * dt
+        if (birdY - BIRD_RADIUS < 0f) {
+            birdY = BIRD_RADIUS
+            velocity = 0f
+        }
+        pipes.forEach { it.x -= PIPE_SPEED * dt }
+        pipes.removeAll { it.x + PIPE_WIDTH < 0f }
+        if (pipes.isEmpty() || pipes.last().x < WIDTH - PIPE_SPACING) {
+            pipes += Pipe(maxOf(WIDTH, (pipes.lastOrNull()?.x ?: 0f) + PIPE_SPACING), randomGapTop())
+        }
+        for (pipe in pipes) {
+            if (!pipe.passed && pipe.x + PIPE_WIDTH < BIRD_X - BIRD_RADIUS) {
+                pipe.passed = true
+                score++
+                if (score >= PIPES_TO_WIN) {
+                    state = State.WON
+                    return
+                }
+            }
+        }
+        if (birdY + BIRD_RADIUS >= GROUND || pipes.any(::hits)) state = State.DEAD
+    }
+
+    private fun hits(pipe: Pipe): Boolean {
+        val overlapsX = BIRD_X + BIRD_RADIUS > pipe.x && BIRD_X - BIRD_RADIUS < pipe.x + PIPE_WIDTH
+        return overlapsX && (birdY - BIRD_RADIUS < pipe.gapTop || birdY + BIRD_RADIUS > pipe.gapBottom)
+    }
+
+    private fun randomGapTop(): Float =
+        GAP_MARGIN + random.nextFloat() * (GROUND - GAP - 2 * GAP_MARGIN)
+
+    private fun reset() {
+        state = State.READY
+        birdY = HEIGHT * 0.4f
+        velocity = 0f
+        score = 0
+        pipes.clear()
+        pipes += Pipe(WIDTH + 40f, randomGapTop())
+    }
+}

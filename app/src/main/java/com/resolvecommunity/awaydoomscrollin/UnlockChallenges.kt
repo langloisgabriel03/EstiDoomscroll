@@ -2,7 +2,10 @@ package com.resolvecommunity.awaydoomscrollin
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
@@ -16,6 +19,7 @@ import android.text.Spanned
 import android.text.TextWatcher
 import android.text.style.BackgroundColorSpan
 import android.text.style.ForegroundColorSpan
+import android.view.Choreographer
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -49,7 +53,8 @@ internal object UnlockChallenges {
     private val factories: List<() -> UnlockChallenge> = listOf(
         ::TypingChallenge,
         ::MathChallenge,
-        ::HoldChallenge
+        ::HoldChallenge,
+        ::FlappyChallenge
     )
 
     val count: Int
@@ -329,6 +334,158 @@ internal class HoldChallenge : UnlockChallenge {
 
     override fun dispose() {
         tick?.let { handler.removeCallbacks(it) }
+    }
+}
+
+/** Flappy Bird clone: tap to flap through the pipes; one full run unlocks. */
+internal class FlappyChallenge : UnlockChallenge {
+    override val title = "Flappy: pass ${FlappyGame.PIPES_TO_WIN} pipes"
+    private var view: FlappyView? = null
+
+    override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
+        val board = FlappyView(ui.context, FlappyGame(), onSolved)
+        view = board
+        val box = ui.column()
+        box.addView(board, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ui.dp(360)))
+        box.addView(ui.text("Tap the board to flap", 13f, ui.dim), ui.params(top = ui.dp(8)))
+        return box
+    }
+
+    override fun dispose() {
+        view?.stop()
+        view = null
+    }
+}
+
+/** Draws [FlappyGame] and feeds it taps. Animates only while a run is in progress. */
+internal class FlappyView(
+    context: Context,
+    private val game: FlappyGame,
+    private val onWin: () -> Unit
+) : View(context) {
+    private val sky = Paint().apply { color = Color.rgb(78, 192, 202) }
+    private val pipePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(116, 191, 46) }
+    private val pipeEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(84, 128, 36)
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+    }
+    private val ground = Paint().apply { color = Color.rgb(222, 216, 149) }
+    private val grass = Paint().apply { color = Color.rgb(115, 191, 46) }
+    private val bird = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(250, 204, 21) }
+    private val eye = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private val pupil = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
+    private val beak = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(249, 115, 22) }
+    private val label = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        setShadowLayer(4f, 0f, 2f, Color.argb(160, 0, 0, 0))
+    }
+    private val rect = RectF()
+    private var lastFrameNanos = 0L
+    private var running = false
+    private var reported = false
+
+    private val frame = Choreographer.FrameCallback { now -> onFrame(now) }
+
+    init {
+        isClickable = true
+        contentDescription = "Flappy game. Tap to flap."
+    }
+
+    fun stop() {
+        running = false
+        Choreographer.getInstance().removeFrameCallback(frame)
+    }
+
+    private fun start() {
+        if (running || !isAttachedToWindow) return
+        running = true
+        lastFrameNanos = 0L
+        Choreographer.getInstance().postFrameCallback(frame)
+    }
+
+    private fun onFrame(now: Long) {
+        if (!running) return
+        if (lastFrameNanos != 0L) game.step((now - lastFrameNanos) / 1_000_000_000f)
+        lastFrameNanos = now
+        invalidate()
+        when (game.state) {
+            FlappyGame.State.PLAYING -> Choreographer.getInstance().postFrameCallback(frame)
+            FlappyGame.State.WON -> {
+                running = false
+                if (!reported) {
+                    reported = true
+                    // After this frame: unlocking removes the window this view is in.
+                    post { onWin() }
+                }
+            }
+            else -> running = false
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        stop()
+        super.onDetachedFromWindow()
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            game.flap()
+            invalidate()
+            if (game.state == FlappyGame.State.PLAYING) start()
+        }
+        return true
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val scale = minOf(width / FlappyGame.WIDTH, height / FlappyGame.HEIGHT)
+        if (scale <= 0f) return
+        canvas.save()
+        canvas.translate((width - FlappyGame.WIDTH * scale) / 2f, (height - FlappyGame.HEIGHT * scale) / 2f)
+        canvas.scale(scale, scale)
+        canvas.clipRect(0f, 0f, FlappyGame.WIDTH, FlappyGame.HEIGHT)
+        canvas.drawRect(0f, 0f, FlappyGame.WIDTH, FlappyGame.HEIGHT, sky)
+        for (pipe in game.pipes) {
+            rect.set(pipe.x, -10f, pipe.x + FlappyGame.PIPE_WIDTH, pipe.gapTop)
+            canvas.drawRect(rect, pipePaint)
+            canvas.drawRect(rect, pipeEdge)
+            rect.set(pipe.x, pipe.gapBottom, pipe.x + FlappyGame.PIPE_WIDTH, FlappyGame.GROUND)
+            canvas.drawRect(rect, pipePaint)
+            canvas.drawRect(rect, pipeEdge)
+        }
+        canvas.drawRect(0f, FlappyGame.GROUND, FlappyGame.WIDTH, FlappyGame.HEIGHT, ground)
+        canvas.drawRect(0f, FlappyGame.GROUND, FlappyGame.WIDTH, FlappyGame.GROUND + 8f, grass)
+
+        // Tilt with speed: nose up when flapping, down when falling.
+        val tilt = (game.velocity / FlappyGame.MAX_FALL_VELOCITY * 60f).coerceIn(-25f, 70f)
+        canvas.save()
+        canvas.rotate(tilt, FlappyGame.BIRD_X, game.birdY)
+        val r = FlappyGame.BIRD_RADIUS
+        canvas.drawCircle(FlappyGame.BIRD_X, game.birdY, r, bird)
+        canvas.drawCircle(FlappyGame.BIRD_X + r * 0.4f, game.birdY - r * 0.35f, r * 0.35f, eye)
+        canvas.drawCircle(FlappyGame.BIRD_X + r * 0.5f, game.birdY - r * 0.35f, r * 0.15f, pupil)
+        rect.set(FlappyGame.BIRD_X + r * 0.6f, game.birdY - r * 0.1f,
+            FlappyGame.BIRD_X + r * 1.4f, game.birdY + r * 0.35f)
+        canvas.drawOval(rect, beak)
+        canvas.restore()
+
+        label.textSize = 40f
+        canvas.drawText("${game.score}/${FlappyGame.PIPES_TO_WIN}", FlappyGame.WIDTH / 2f, 56f, label)
+        val message = when (game.state) {
+            FlappyGame.State.READY -> "Tap to fly"
+            FlappyGame.State.DEAD -> "Crashed! Tap to retry"
+            FlappyGame.State.WON -> "Unlocked!"
+            FlappyGame.State.PLAYING -> null
+        }
+        if (message != null) {
+            label.textSize = 26f
+            canvas.drawText(message, FlappyGame.WIDTH / 2f, FlappyGame.HEIGHT * 0.62f, label)
+        }
+        canvas.restore()
     }
 }
 
