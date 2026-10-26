@@ -9,7 +9,7 @@ import android.content.SharedPreferences
  * unguarded for [WINDOW_MINUTES]. Game rules live in UnlockChallengeLogic.kt.
  */
 object ReelsWaitConfig {
-    const val WAIT_SECONDS = 120
+    const val WAIT_SECONDS = 300
     const val WINDOW_MINUTES = 5
 
     const val WINDOW_MS = WINDOW_MINUTES * 60_000L

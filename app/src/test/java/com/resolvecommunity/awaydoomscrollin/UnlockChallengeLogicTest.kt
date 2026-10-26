@@ -104,15 +104,17 @@ class UnlockChallengeLogicTest {
     fun `flappy is winnable on every level`() {
         // A simple autopilot aims for the middle of the next gap. If it can
         // win every seed, the pipes never ask for something impossible.
-        for (seed in 1..30) {
+        for (seed in 1..50) {
             val game = FlappyGame(Random(seed))
             game.flap()
             var seconds = 0f
-            while (game.state == FlappyGame.State.PLAYING && seconds < 120f) {
+            while (game.state == FlappyGame.State.PLAYING && seconds < 300f) {
                 val next = game.pipes.first {
                     it.x + FlappyGame.PIPE_WIDTH >= FlappyGame.BIRD_X - FlappyGame.BIRD_RADIUS
                 }
-                if (game.birdY > next.gapTop + FlappyGame.GAP / 2 + 15f && game.velocity >= 0f) game.flap()
+                // Flap just low enough that the top of the jump clears the upper pipe.
+                val rise = FlappyGame.FLAP_VELOCITY * FlappyGame.FLAP_VELOCITY / (2 * FlappyGame.GRAVITY)
+                if (game.birdY > next.gapTop + FlappyGame.BIRD_RADIUS + rise + 4f && game.velocity >= 0f) game.flap()
                 game.step(1f / 60f)
                 seconds += 1f / 60f
             }
@@ -122,7 +124,100 @@ class UnlockChallengeLogicTest {
     }
 
     @Test
+    fun `flappy speeds up and narrows its gaps up to a ceiling`() {
+        val game = FlappyGame(Random(3))
+        assertEquals(FlappyGame.BASE_SPEED, game.speed, 0f)
+        assertEquals(FlappyGame.BASE_GAP, game.pipes.first().gap, 0f)
+        game.flap()
+        val gaps = mutableListOf<Float>()
+        var previous: FlappyGame.Pipe? = null
+        repeat(20_000) {
+            // Hold the bird in the middle of each pipe so the run continues.
+            val next = game.pipes.first { it.x + FlappyGame.PIPE_WIDTH >= FlappyGame.BIRD_X - FlappyGame.BIRD_RADIUS }
+            game.birdY = next.gapTop + next.gap / 2
+            game.velocity = 0f
+            game.step(1f / 60f)
+            val last = game.pipes.last()
+            if (last !== previous) {
+                gaps += last.gap
+                previous?.let { prev ->
+                    val shift = (last.gapTop + last.gap / 2) - (prev.gapTop + prev.gap / 2)
+                    assertTrue("gap jumped $shift", kotlin.math.abs(shift) <= FlappyGame.MAX_GAP_SHIFT + 0.01f)
+                }
+                previous = last
+            }
+            if (game.state != FlappyGame.State.PLAYING) return@repeat
+        }
+        assertEquals(FlappyGame.State.WON, game.state)
+        assertEquals(FlappyGame.MAX_SPEED, game.speed, 0f)
+        assertTrue(gaps.zipWithNext().all { (a, b) -> b <= a })
+        assertEquals(FlappyGame.MIN_GAP, gaps.last(), 0f)
+    }
+
+    @Test
+    fun `rush hour parses cars and trucks and slides them to obstacles`() {
+        val board = RushHourBoard(
+            "ooooBo" +
+            "ooooBo" +
+            "AAooBo" +
+            "oooooo" +
+            "CCCooo" +
+            "oooooo")
+        val red = board.target
+        val truck = board.vehicleAt(0, 4)!!
+        val lorry = board.vehicleAt(4, 0)!!
+        assertTrue(red.horizontal)
+        assertFalse(truck.horizontal)
+        assertEquals(3, truck.length)
+        assertEquals(3, lorry.length)
+        assertEquals(0..2, board.range(red))
+        assertFalse(board.moveTo(red, 4))
+        assertTrue(board.moveTo(truck, 3))
+        assertEquals(1, board.moves)
+        assertEquals(0..4, board.range(red))
+        assertTrue(board.moveTo(red, 4))
+        assertTrue(board.isSolved)
+    }
+
+    @Test
+    fun `every rush hour level is solvable in its stated minimum`() {
+        assertTrue(RushHourLevels.all.size >= 20)
+        for ((layout, par) in RushHourLevels.all) {
+            assertEquals(layout, par, rushHourMinMoves(layout))
+            assertTrue(layout, par >= 10)
+        }
+    }
+
+    /** Breadth-first search over vehicle positions; a slide of any length is one move. */
+    private fun rushHourMinMoves(layout: String): Int? {
+        val board = RushHourBoard(layout)
+        val vehicles = board.vehicles
+        fun apply(state: List<Int>) = vehicles.forEachIndexed { i, v -> v.position = state[i] }
+        val start = vehicles.map { it.position }
+        val seen = hashMapOf(start to 0)
+        val queue = ArrayDeque(listOf(start))
+        while (queue.isNotEmpty()) {
+            val state = queue.removeFirst()
+            val depth = seen.getValue(state)
+            apply(state)
+            if (board.isSolved) return depth
+            vehicles.forEachIndexed { i, v ->
+                apply(state)
+                for (p in board.range(v)) {
+                    if (p == state[i]) continue
+                    val next = state.toMutableList().also { it[i] = p }
+                    if (next !in seen) {
+                        seen[next] = depth + 1
+                        queue.addLast(next)
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    @Test
     fun `every game is registered`() {
-        assertEquals(4, UnlockChallenges.count)
+        assertEquals(5, UnlockChallenges.count)
     }
 }

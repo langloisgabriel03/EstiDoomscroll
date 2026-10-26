@@ -54,7 +54,8 @@ internal object UnlockChallenges {
         ::TypingChallenge,
         ::MathChallenge,
         ::HoldChallenge,
-        ::FlappyChallenge
+        ::FlappyChallenge,
+        ::RushHourChallenge
     )
 
     val count: Int
@@ -433,6 +434,8 @@ internal class FlappyView(
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            // Keep the wait screen's scroll view from taking the tap.
+            parent?.requestDisallowInterceptTouchEvent(true)
             game.flap()
             invalidate()
             if (game.state == FlappyGame.State.PLAYING) start()
