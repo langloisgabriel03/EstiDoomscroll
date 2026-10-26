@@ -192,23 +192,24 @@ class UnlockChallengeLogicTest {
     private fun rushHourMinMoves(layout: String): Int? {
         val board = RushHourBoard(layout)
         val vehicles = board.vehicles
-        fun apply(state: List<Int>) = vehicles.forEachIndexed { i, v -> v.position = state[i] }
+        fun place(state: List<Int>) = vehicles.forEachIndexed { i, v -> v.position = state[i] }
         val start = vehicles.map { it.position }
         val seen = hashMapOf(start to 0)
-        val queue = ArrayDeque(listOf(start))
-        while (queue.isNotEmpty()) {
-            val state = queue.removeFirst()
+        val queue = mutableListOf(start)
+        var head = 0
+        while (head < queue.size) {
+            val state = queue[head++]
             val depth = seen.getValue(state)
-            apply(state)
+            place(state)
             if (board.isSolved) return depth
             vehicles.forEachIndexed { i, v ->
-                apply(state)
+                place(state)
                 for (p in board.range(v)) {
                     if (p == state[i]) continue
                     val next = state.toMutableList().also { it[i] = p }
                     if (next !in seen) {
                         seen[next] = depth + 1
-                        queue.addLast(next)
+                        queue += next
                     }
                 }
             }
