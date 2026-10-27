@@ -160,7 +160,8 @@ internal class ChallengeUi(val context: Context) {
 
 /**
  * A game's clock and its record: the fastest win, kept in the app's
- * preferences on this phone. Shows "Time m:ss · Record m:ss" and announces
+ * preferences on this phone. Only for games that are the same every time
+ * (2048, Stack), so records compare like with like. Shows "Time m:ss · Record m:ss" and announces
  * a new record with a toast, since winning usually closes the wait screen.
  */
 internal class RecordClock(private val ui: ChallengeUi, private val key: String) {
@@ -231,16 +232,9 @@ internal class RecordClock(private val ui: ChallengeUi, private val key: String)
 internal class TypingChallenge : UnlockChallenge {
     override val title = "Type it exactly"
     private val target = TypingCheck.sentences.random()
-    private var clock: RecordClock? = null
-
-    override fun dispose() {
-        clock?.stop()
-    }
 
     override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
         val box = ui.column()
-        val record = RecordClock(ui, "record_ms_typing").also { clock = it }
-        box.addView(record.label, ui.params())
         val sentence = ui.text("", 19f).apply {
             gravity = Gravity.START
             setLineSpacing(0f, 1.25f)
@@ -286,7 +280,6 @@ internal class TypingChallenge : UnlockChallenge {
             val typed = editable.toString()
             if (typed.length > previous.length) {
                 if (startedAt == 0L) startedAt = SystemClock.uptimeMillis()
-                record.start()
                 for (i in previous.length until typed.length) {
                     totalKeys++
                     if (i < target.length && typed[i] == target[i]) correctKeys++
@@ -296,11 +289,10 @@ internal class TypingChallenge : UnlockChallenge {
             render(typed)
             if (!solved && TypingCheck.isComplete(target, typed)) {
                 solved = true
-                record.finish()
                 onSolved()
             }
         })
-        box.addView(sentence, ui.params(top = ui.dp(10)))
+        box.addView(sentence, ui.params())
         box.addView(field, ui.params(top = ui.dp(14)))
         box.addView(stats, ui.params(top = ui.dp(8)))
         render("")
@@ -311,17 +303,9 @@ internal class TypingChallenge : UnlockChallenge {
 /** Mental math: solve three sums; a wrong answer swaps in a new one. */
 internal class MathChallenge : UnlockChallenge {
     override val title = "Solve ${MathCheck.PROBLEMS_TO_SOLVE} sums"
-    private var clock: RecordClock? = null
-
-    override fun dispose() {
-        clock?.stop()
-    }
 
     override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
         val box = ui.column()
-        val record = RecordClock(ui, "record_ms_math").also { clock = it }
-        record.start()
-        box.addView(record.label, ui.params())
         var problem = MathCheck.generate()
         var solvedCount = 0
         val question = ui.text("", 34f, style = Typeface.BOLD)
@@ -341,7 +325,6 @@ internal class MathChallenge : UnlockChallenge {
             if (MathCheck.isCorrect(problem, field.text.toString())) {
                 solvedCount++
                 if (solvedCount >= MathCheck.PROBLEMS_TO_SOLVE) {
-                    record.finish()
                     onSolved()
                     return
                 }
@@ -359,7 +342,7 @@ internal class MathChallenge : UnlockChallenge {
             if (event == null || event.action == KeyEvent.ACTION_DOWN) check()
             true
         }
-        box.addView(question, ui.params(top = ui.dp(10)))
+        box.addView(question, ui.params())
         box.addView(field, ui.params(top = ui.dp(12)))
         box.addView(ui.button("Check", filled = false) { check() }, ui.params(top = ui.dp(10)))
         box.addView(progress, ui.params(top = ui.dp(8)))

@@ -22,18 +22,11 @@ import kotlin.math.roundToInt
 internal class RushHourChallenge : UnlockChallenge {
     override val title = "Rush Hour: free the red car"
     private var board: RushHourView? = null
-    private var clock: RecordClock? = null
 
     override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
         val box = ui.column()
-        val record = RecordClock(ui, "record_ms_rushhour").also { clock = it }
-        record.start()
-        box.addView(record.label, ui.params())
         val stats = ui.text("", 13f, ui.dim)
-        val view = RushHourView(ui.context, {
-            record.finish()
-            onSolved()
-        }) { moves, par ->
+        val view = RushHourView(ui.context, onSolved) { moves, par ->
             stats.text = "Moves: $moves  ·  Best possible: $par"
         }
         board = view
@@ -47,11 +40,9 @@ internal class RushHourChallenge : UnlockChallenge {
         buttons.addView(ui.button("New puzzle", filled = false) {
             val (next, nextPar) = RushHourLevels.random()
             view.load(next, nextPar)
-            record.reset()
-            record.start()
         }, LinearLayout.LayoutParams(half).apply { marginStart = ui.dp(6) })
 
-        box.addView(stats, ui.params(top = ui.dp(4)))
+        box.addView(stats, ui.params())
         box.addView(view, ui.params(top = ui.dp(8)))
         box.addView(ui.text("Drag cars and trucks along their lanes", 13f, ui.dim),
             ui.params(top = ui.dp(6)))
@@ -60,7 +51,6 @@ internal class RushHourChallenge : UnlockChallenge {
     }
 
     override fun dispose() {
-        clock?.stop()
         board?.stop()
         board = null
     }

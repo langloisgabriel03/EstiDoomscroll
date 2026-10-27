@@ -22,26 +22,15 @@ import android.widget.TextView
 /** Sudoku: fill the grid correctly to unlock. */
 internal class SudokuChallenge : UnlockChallenge {
     override val title = "Sudoku: fill the grid"
-    private var clock: RecordClock? = null
-
-    override fun dispose() {
-        clock?.stop()
-    }
 
     override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
         val box = ui.column()
-        val record = RecordClock(ui, "record_ms_sudoku").also { clock = it }
-        record.start()
-        box.addView(record.label, ui.params())
         val stats = ui.text("", 13f, ui.dim)
         val (puzzle, solution) = SudokuPuzzles.random()
-        val board = SudokuView(ui.context, SudokuBoard(puzzle, solution), {
-            record.finish()
-            onSolved()
-        }) { filled ->
+        val board = SudokuView(ui.context, SudokuBoard(puzzle, solution), onSolved) { filled ->
             stats.text = "Filled $filled / ${SudokuBoard.SIZE * SudokuBoard.SIZE}  ·  Red means a clash"
         }
-        box.addView(stats, ui.params(top = ui.dp(4)))
+        box.addView(stats, ui.params())
         box.addView(board, ui.params(top = ui.dp(8)))
 
         // Number pad: 1-5 and 6-9 plus erase, sized like keys.
