@@ -10,9 +10,6 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
@@ -24,66 +21,26 @@ import kotlin.math.abs
  * reach it, timed from the first swipe of a game; it stays on this phone.
  */
 internal class Game2048Challenge : UnlockChallenge {
-    companion object {
-        private const val KEY_RECORD_MS = "game2048_record_ms"
-    }
-
     override val title = "2048: reach ${Game2048.TARGET}"
     private var board: Game2048View? = null
-    private val handler = Handler(Looper.getMainLooper())
-    private var ticker: Runnable? = null
+    private var clock: RecordClock? = null
 
     override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
         val box = ui.column()
-        val stats = ui.text("", 15f, style = Typeface.BOLD)
-        val prefs = ui.context.getSharedPreferences(ProtectionPreferences.PREFS_NAME, Context.MODE_PRIVATE)
-        var recordMs = prefs.getLong(KEY_RECORD_MS, 0L)
-        var startedAt = 0L
-        var finishedMs = -1L
-        var newRecord = false
+        // Same key as before the shared clock, so an existing record is kept.
+        val record = RecordClock(ui, "game2048_record_ms").also { clock = it }
         val game = Game2048()
-
-        fun clock(ms: Long) = ReelsWaitConfig.formatCountdown(ms / 1000)
-        fun render() {
-            val elapsed = when {
-                finishedMs >= 0 -> finishedMs
-                startedAt > 0 -> SystemClock.uptimeMillis() - startedAt
-                else -> 0L
-            }
-            stats.text = "Time ${clock(elapsed)}  ·  Record ${if (recordMs > 0) clock(recordMs) else "--:--"}" +
-                if (newRecord) "  ·  New record!" else ""
-        }
-
         val view = Game2048View(ui.context, game, onSolved) { moved ->
-            val now = SystemClock.uptimeMillis()
             if (!moved) {
                 // New game: the clock waits for its first swipe.
-                startedAt = 0L
-                finishedMs = -1L
-            } else if (startedAt == 0L) {
-                startedAt = now
+                record.reset()
+            } else {
+                record.start()
+                if (game.won) record.finish()
             }
-            if (moved && game.won && finishedMs < 0) {
-                finishedMs = now - startedAt
-                if (recordMs == 0L || finishedMs < recordMs) {
-                    recordMs = finishedMs
-                    newRecord = true
-                    prefs.edit().putLong(KEY_RECORD_MS, recordMs).apply()
-                }
-            }
-            render()
         }
         board = view
-        val tick = object : Runnable {
-            override fun run() {
-                render()
-                handler.postDelayed(this, 500L)
-            }
-        }
-        ticker = tick
-        handler.post(tick)
-
-        box.addView(stats, ui.params())
+        box.addView(record.label, ui.params())
         box.addView(view, ui.params(top = ui.dp(8)))
         box.addView(ui.text("Swipe to slide the tiles", 13f, ui.dim), ui.params(top = ui.dp(6)))
         box.addView(ui.button("New game", filled = false) { view.newGame() }, ui.params(top = ui.dp(10)))
@@ -91,8 +48,7 @@ internal class Game2048Challenge : UnlockChallenge {
     }
 
     override fun dispose() {
-        ticker?.let { handler.removeCallbacks(it) }
-        ticker = null
+        clock?.stop()
         board?.stop()
         board = null
     }

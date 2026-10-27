@@ -22,15 +22,26 @@ import android.widget.TextView
 /** Sudoku: fill the grid correctly to unlock. */
 internal class SudokuChallenge : UnlockChallenge {
     override val title = "Sudoku: fill the grid"
+    private var clock: RecordClock? = null
+
+    override fun dispose() {
+        clock?.stop()
+    }
 
     override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
         val box = ui.column()
+        val record = RecordClock(ui, "record_ms_sudoku").also { clock = it }
+        record.start()
+        box.addView(record.label, ui.params())
         val stats = ui.text("", 13f, ui.dim)
         val (puzzle, solution) = SudokuPuzzles.random()
-        val board = SudokuView(ui.context, SudokuBoard(puzzle, solution), onSolved) { filled ->
+        val board = SudokuView(ui.context, SudokuBoard(puzzle, solution), {
+            record.finish()
+            onSolved()
+        }) { filled ->
             stats.text = "Filled $filled / ${SudokuBoard.SIZE * SudokuBoard.SIZE}  ·  Red means a clash"
         }
-        box.addView(stats, ui.params())
+        box.addView(stats, ui.params(top = ui.dp(4)))
         box.addView(board, ui.params(top = ui.dp(8)))
 
         // Number pad: 1-5 and 6-9 plus erase, sized like keys.
@@ -182,11 +193,24 @@ internal class SudokuView(
 internal class StackChallenge : UnlockChallenge {
     override val title = "Stack: build ${StackGame.TARGET} floors"
     private var view: StackView? = null
+    private var clock: RecordClock? = null
 
     override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
-        val board = StackView(ui.context, StackGame(), onSolved)
+        val record = RecordClock(ui, "record_ms_stack").also { clock = it }
+        val board = StackView(ui.context, StackGame(), {
+            record.finish()
+            onSolved()
+        }) { before ->
+            // The clock times one run: from its first tap; a retry restarts it.
+            when (before) {
+                StackGame.State.READY -> record.start()
+                StackGame.State.DEAD -> record.reset()
+                else -> Unit
+            }
+        }
         view = board
         val box = ui.column()
+        box.addView(record.label, ui.params())
         box.addView(board, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ui.dp(420)))
         box.addView(ui.text("Tap to drop the block. Overhangs are cut off.", 13f, ui.dim),
             ui.params(top = ui.dp(8)))
@@ -194,6 +218,7 @@ internal class StackChallenge : UnlockChallenge {
     }
 
     override fun dispose() {
+        clock?.stop()
         view?.stop()
         view = null
     }
@@ -207,7 +232,9 @@ internal class StackChallenge : UnlockChallenge {
 internal class StackView(
     context: Context,
     private val game: StackGame,
-    private val onWin: () -> Unit
+    private val onWin: () -> Unit,
+    /** Each tap, with the state the game was in before it. */
+    private val onTap: (before: StackGame.State) -> Unit = {}
 ) : View(context) {
     private companion object {
         const val FLOOR = 14f
@@ -285,9 +312,11 @@ internal class StackView(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (event.actionMasked != MotionEvent.ACTION_DOWN) return true
         parent?.requestDisallowInterceptTouchEvent(true)
-        val wasPlaying = game.state == StackGame.State.PLAYING
-        val wasDead = game.state == StackGame.State.DEAD
+        val before = game.state
+        val wasPlaying = before == StackGame.State.PLAYING
+        val wasDead = before == StackGame.State.DEAD
         game.tap()
+        onTap(before)
         if (wasPlaying) {
             game.lastCut?.let { debris += Debris(it.block, it.level, 0f, 0f) }
             if (game.lastPerfect) perfectUntil = SystemClock.uptimeMillis() + 700L
