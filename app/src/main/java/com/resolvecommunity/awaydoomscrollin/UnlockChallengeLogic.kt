@@ -375,24 +375,50 @@ class Game2048(private val random: Random = Random.Default) {
     fun restart() {
         cells.fill(0)
         score = 0
+        lastMoves = emptyList()
+        lastMerged = emptySet()
+        lastSpawn = -1
         spawn()
         spawn()
     }
 
+    /** One tile's trip in the last move, as cell indices, with the value it had while moving. */
+    data class TileMove(val from: Int, val to: Int, val value: Int)
+
+    /** Tiles that moved or stayed in the last move, for the slide animation. */
+    var lastMoves: List<TileMove> = emptyList()
+        private set
+    /** Cells that hold a merged tile after the last move. */
+    var lastMerged: Set<Int> = emptySet()
+        private set
+    /** Cell of the tile added after the last move, or -1. */
+    var lastSpawn = -1
+        private set
+
     /** Slides the board; returns false (and adds nothing) when nothing moved. */
     fun move(direction: Direction): Boolean {
+        val moves = mutableListOf<TileMove>()
+        val merged = mutableSetOf<Int>()
         var moved = false
         for (line in 0 until SIZE) {
             val indices = lineIndices(direction, line)
             val values = indices.map { cells[it] }
-            val merged = slide(values)
-            if (merged != values) {
+            val result = slideLine(values)
+            for ((source, target) in result.destinations) {
+                moves += TileMove(indices[source], indices[target], values[source])
+            }
+            result.mergedAt.forEach { merged += indices[it] }
+            if (result.values != values) {
                 moved = true
-                indices.forEachIndexed { i, index -> cells[index] = merged[i] }
+                indices.forEachIndexed { i, index -> cells[index] = result.values[i] }
             }
         }
-        if (moved) spawn()
-        return moved
+        if (!moved) return false
+        score += merged.sumOf { cells[it] }
+        lastMoves = moves
+        lastMerged = merged
+        lastSpawn = spawn()
+        return true
     }
 
     /** Cell indices of one row/column, ordered from the side tiles slide toward. */
@@ -405,29 +431,46 @@ class Game2048(private val random: Random = Random.Default) {
         }
     }
 
+    internal class LineResult(
+        val values: List<Int>,
+        /** Source position to target position, for every tile in the line. */
+        val destinations: List<Pair<Int, Int>>,
+        val mergedAt: List<Int>
+    )
+
     /** One line toward index 0: compact, merge equal pairs once, compact. */
-    internal fun slide(values: List<Int>): List<Int> {
-        val tiles = values.filter { it != 0 }
+    internal fun slideLine(values: List<Int>): LineResult {
+        val tiles = values.indices.filter { values[it] != 0 }
         val out = mutableListOf<Int>()
+        val destinations = mutableListOf<Pair<Int, Int>>()
+        val mergedAt = mutableListOf<Int>()
         var i = 0
         while (i < tiles.size) {
-            if (i + 1 < tiles.size && tiles[i] == tiles[i + 1]) {
-                val sum = tiles[i] * 2
-                out += sum
-                score += sum
+            val target = out.size
+            if (i + 1 < tiles.size && values[tiles[i]] == values[tiles[i + 1]]) {
+                out += values[tiles[i]] * 2
+                destinations += tiles[i] to target
+                destinations += tiles[i + 1] to target
+                mergedAt += target
                 i += 2
             } else {
-                out += tiles[i]
+                out += values[tiles[i]]
+                destinations += tiles[i] to target
                 i++
             }
         }
         while (out.size < SIZE) out += 0
-        return out
+        return LineResult(out, destinations, mergedAt)
     }
 
-    private fun spawn() {
+    internal fun slide(values: List<Int>): List<Int> = slideLine(values).values
+
+    /** Adds a 2 (or, 1 time in 10, a 4) on a random empty cell; returns it, or -1. */
+    private fun spawn(): Int {
         val empty = cells.indices.filter { cells[it] == 0 }
-        if (empty.isEmpty()) return
-        cells[empty.random(random)] = if (random.nextInt(10) == 0) 4 else 2
+        if (empty.isEmpty()) return -1
+        val cell = empty.random(random)
+        cells[cell] = if (random.nextInt(10) == 0) 4 else 2
+        return cell
     }
 }

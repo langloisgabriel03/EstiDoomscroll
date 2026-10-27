@@ -198,6 +198,8 @@ internal class RushHourView(
         val w = width.toFloat()
         val radius = w * 0.05f
         // Tray body with a soft vertical sheen.
+        // Opaque base: a shader is drawn with the paint\'s alpha.
+        paint.color = Color.WHITE
         paint.shader = LinearGradient(0f, 0f, 0f, w,
             Color.rgb(70, 76, 88), Color.rgb(30, 33, 40), Shader.TileMode.CLAMP)
         rect.set(0f, 0f, w, w)
@@ -318,6 +320,8 @@ internal class RushHourView(
 
     /** Body: rounded, lit from one side, darker toward the other, with a rim highlight. */
     private fun drawBody(canvas: Canvas, left: Float, right: Float, side: Float, color: Int, radius: Float) {
+        // Opaque base: a shader is drawn with the paint\'s alpha.
+        paint.color = Color.WHITE
         paint.shader = LinearGradient(0f, -side, 0f, side,
             intArrayOf(tint(color, 0.35f), color, shade(color, 0.62f)),
             floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
@@ -334,6 +338,8 @@ internal class RushHourView(
     }
 
     private fun drawGlass(canvas: Canvas, left: Float, right: Float, halfWidth: Float) {
+        // Opaque base: a shader is drawn with the paint\'s alpha.
+        paint.color = Color.WHITE
         paint.shader = LinearGradient(left, -halfWidth, right, halfWidth,
             Color.rgb(148, 197, 233), Color.rgb(30, 41, 59), Shader.TileMode.CLAMP)
         rect.set(left, -halfWidth, right, halfWidth)
@@ -348,6 +354,8 @@ internal class RushHourView(
 
     private fun drawLights(canvas: Canvas, half: Float, side: Float) {
         val r = cell * 0.05f
+        // Opaque base: a shader is drawn with the paint\'s alpha.
+        paint.color = Color.WHITE
         paint.shader = RadialGradient(0f, 0f, r, Color.WHITE, Color.rgb(253, 224, 71), Shader.TileMode.CLAMP)
         for (sign in floatArrayOf(-1f, 1f)) {
             canvas.save()
@@ -376,6 +384,8 @@ internal class RushHourView(
         val length = 2 * half
         drawGlass(canvas, -half + length * 0.22f, -half + length * 0.34f, side * 0.62f) // rear window
         // Roof, slightly raised: a lighter panel between the windows.
+        // Opaque base: a shader is drawn with the paint\'s alpha.
+        paint.color = Color.WHITE
         paint.shader = LinearGradient(0f, -side, 0f, side, tint(color, 0.45f), shade(color, 0.8f), Shader.TileMode.CLAMP)
         rect.set(-half + length * 0.35f, -side * 0.66f, -half + length * 0.6f, side * 0.66f)
         canvas.drawRoundRect(rect, cell * 0.08f, cell * 0.08f, paint)

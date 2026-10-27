@@ -278,6 +278,27 @@ class UnlockChallengeLogicTest {
     }
 
     @Test
+    fun `2048 reports where every tile slid for the animation`() {
+        val game = Game2048(Random(5))
+        val line = game.slideLine(listOf(0, 2, 2, 4))
+        assertEquals(listOf(4, 4, 0, 0), line.values)
+        assertEquals(listOf(1 to 0, 2 to 0, 3 to 1), line.destinations)
+        assertEquals(listOf(0), line.mergedAt)
+
+        game.cells.fill(0)
+        game.cells[1] = 2
+        game.cells[2] = 2
+        game.cells[3] = 4
+        assertTrue(game.move(Game2048.Direction.LEFT))
+        assertEquals(listOf(Game2048.TileMove(1, 0, 2), Game2048.TileMove(2, 0, 2), Game2048.TileMove(3, 1, 4)),
+            game.lastMoves)
+        assertEquals(setOf(0), game.lastMerged)
+        assertEquals(4, game.score)
+        assertTrue(game.lastSpawn in 2..15)
+        assertTrue(game.cells[game.lastSpawn] in setOf(2, 4))
+    }
+
+    @Test
     fun `every game is registered`() {
         assertEquals(6, UnlockChallenges.count)
     }
