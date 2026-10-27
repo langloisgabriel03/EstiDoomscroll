@@ -425,6 +425,76 @@ class UnlockChallengeLogicTest {
 
     @Test
     fun `every game is registered`() {
-        assertEquals(7, UnlockChallenges.count)
+        assertEquals(8, UnlockChallenges.count)
+    }
+
+    private fun PaperTossGame.flyOut() {
+        var seconds = 0f
+        while (state == PaperTossGame.State.FLYING && seconds < 5f) {
+            step(1f / 60f)
+            seconds += 1f / 60f
+        }
+    }
+
+    @Test
+    fun `paper toss aimed into the wind wins ten in a row`() {
+        repeat(20) { seed ->
+            val game = PaperTossGame(Random(seed))
+            repeat(PaperTossGame.STREAK_TO_WIN) {
+                assertTrue(game.throwAt(game.perfectAim()))
+                game.flyOut()
+                game.next()
+            }
+            assertEquals(PaperTossGame.State.WON, game.state)
+            assertEquals(PaperTossGame.STREAK_TO_WIN, game.streak)
+        }
+    }
+
+    @Test
+    fun `paper toss thrown way off misses and resets the streak`() {
+        val game = PaperTossGame(Random(3))
+        game.throwAt(game.perfectAim())
+        game.flyOut()
+        assertEquals(PaperTossGame.State.SCORED, game.state)
+        assertEquals(1, game.streak)
+        game.next()
+        game.throwAt(game.perfectAim() + 20f)
+        game.flyOut()
+        assertEquals(PaperTossGame.State.MISSED, game.state)
+        assertEquals(0, game.streak)
+        assertEquals(1, game.best)
+    }
+
+    @Test
+    fun `paper toss wind pushes a straight throw sideways`() {
+        val game = PaperTossGame(Random(1))
+        var tries = 0
+        while (kotlin.math.abs(game.wind) < 0.8f && tries++ < 50) {
+            game.throwAt(game.perfectAim()); game.flyOut(); game.next()
+        }
+        // A strong gust: aiming dead ahead drifts off target.
+        if (kotlin.math.abs(game.wind) >= 0.8f) {
+            val before = game.wind
+            game.throwAt(0f)
+            game.flyOut()
+            assertTrue(game.x * before > 0f)
+        }
+    }
+
+    @Test
+    fun `paper toss clipping the rim bounces out`() {
+        val game = PaperTossGame(Random(5))
+        val perfect = game.perfectAim()
+        // Sweep the aim outward until a throw grazes the rim.
+        var rim = false
+        var offset = 0f
+        while (!rim && offset < 6f) {
+            offset += 0.05f
+            val g = PaperTossGame(Random(5))
+            g.throwAt(perfect + offset)
+            g.flyOut()
+            if (g.state == PaperTossGame.State.MISSED && g.hitRim) rim = true
+        }
+        assertTrue(rim)
     }
 }

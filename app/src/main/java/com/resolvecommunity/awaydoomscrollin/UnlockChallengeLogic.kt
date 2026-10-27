@@ -744,3 +744,156 @@ class StackGame(private val random: Random = Random.Default) {
         moving = Block(0f, 0f, BASE_SIZE, BASE_SIZE)
     }
 }
+
+/**
+ * Paper Toss: flick a paper ball into a bin across the office while a fan
+ * blows sideways. Metres in a room seen from the desk: x to the right, y up,
+ * z away from the player. Power is fixed; the flick sets the direction, so the
+ * skill is aiming into the wind. [STREAK_TO_WIN] baskets in a row unlocks.
+ */
+class PaperTossGame(private val random: Random = Random.Default) {
+    companion object {
+        const val GRAVITY = 9.8f
+        const val START_Y = 1.0f
+        const val START_Z = 0.3f
+        const val LAUNCH_VY = 3.2f
+        const val BIN_Z = 4.3f
+        const val BIN_RADIUS = 0.2f
+        const val BIN_HEIGHT = 0.45f
+        const val BALL_RADIUS = 0.06f
+        const val MAX_AIM_DEGREES = 35f
+        const val STREAK_TO_WIN = 10
+        const val BASE_WIND = 1.0f
+        const val WIND_STEP = 0.15f
+        const val MAX_WIND = 2.5f
+
+        /** Seconds from release until the ball comes down to the rim's height. */
+        val FLIGHT_TIME: Float = run {
+            val drop = START_Y - BIN_HEIGHT
+            (LAUNCH_VY + kotlin.math.sqrt(LAUNCH_VY * LAUNCH_VY + 2 * GRAVITY * drop)) / GRAVITY
+        }
+
+        /** Forward speed that brings the ball to the bin's centre at that moment. */
+        val LAUNCH_VZ: Float = (BIN_Z - START_Z) / FLIGHT_TIME
+    }
+
+    enum class State { AIMING, FLYING, SCORED, MISSED, WON }
+
+    var state = State.AIMING
+        private set
+    /** Sideways acceleration from the fan, m/s²; positive blows to the right. */
+    var wind = 0f
+        private set
+    var streak = 0
+        private set
+    var best = 0
+        private set
+    /** True when the last miss touched the rim. */
+    var hitRim = false
+        private set
+
+    var x = 0f
+        private set
+    var y = START_Y
+        private set
+    var z = START_Z
+        private set
+    private var vx = 0f
+    private var vy = 0f
+    private var vz = 0f
+    private var below = false
+
+    init {
+        newWind()
+    }
+
+    /** The aim (degrees, right positive) that lands dead centre in this wind. */
+    fun perfectAim(): Float {
+        val vxNeeded = -0.5f * wind * FLIGHT_TIME
+        return Math.toDegrees(kotlin.math.atan2(vxNeeded, LAUNCH_VZ).toDouble()).toFloat()
+    }
+
+    /** Throws at [degrees] off straight ahead (clamped). Only while aiming. */
+    fun throwAt(degrees: Float): Boolean {
+        if (state != State.AIMING) return false
+        val angle = Math.toRadians(degrees.coerceIn(-MAX_AIM_DEGREES, MAX_AIM_DEGREES).toDouble())
+        vz = LAUNCH_VZ
+        vx = (kotlin.math.tan(angle) * LAUNCH_VZ).toFloat()
+        vy = LAUNCH_VY
+        x = 0f
+        y = START_Y
+        z = START_Z
+        below = false
+        hitRim = false
+        state = State.FLYING
+        return true
+    }
+
+    fun step(seconds: Float) {
+        var left = seconds.coerceIn(0f, 0.1f)
+        while (left > 0f && state == State.FLYING) {
+            val dt = minOf(left, 1f / 240f)
+            advance(dt)
+            left -= dt
+        }
+    }
+
+    private fun advance(dt: Float) {
+        vx += wind * dt
+        vy -= GRAVITY * dt
+        val wasAbove = y > BIN_HEIGHT
+        x += vx * dt
+        y += vy * dt
+        z += vz * dt
+        // Coming down through the rim's height: in, off the rim, or past.
+        if (wasAbove && y <= BIN_HEIGHT && !below) {
+            below = true
+            val distance = kotlin.math.hypot(x, z - BIN_Z)
+            if (distance <= BIN_RADIUS - BALL_RADIUS * 0.5f) {
+                score()
+                return
+            }
+            if (distance <= BIN_RADIUS + BALL_RADIUS) {
+                // Clipped the rim: knocked back out and away.
+                hitRim = true
+                val nx = x / distance
+                val nz = (z - BIN_Z) / distance
+                vx = nx * 1.2f
+                vz = nz * 1.2f
+                vy = 1.2f
+            }
+        }
+        if (y <= BALL_RADIUS) {
+            y = BALL_RADIUS
+            miss()
+        }
+    }
+
+    private fun score() {
+        y = BIN_HEIGHT - 0.1f
+        streak++
+        best = maxOf(best, streak)
+        state = if (streak >= STREAK_TO_WIN) State.WON else State.SCORED
+    }
+
+    private fun miss() {
+        streak = 0
+        state = State.MISSED
+    }
+
+    /** After a result is shown: back to aiming with a fresh wind. */
+    fun next() {
+        if (state != State.SCORED && state != State.MISSED) return
+        state = State.AIMING
+        x = 0f
+        y = START_Y
+        z = START_Z
+        newWind()
+    }
+
+    /** A new gust, stronger as the streak grows, to two decimals like the fan's dial. */
+    private fun newWind() {
+        val strength = (BASE_WIND + streak * WIND_STEP).coerceAtMost(MAX_WIND)
+        wind = kotlin.math.round((random.nextFloat() * 2f - 1f) * strength * 100f) / 100f
+    }
+}
