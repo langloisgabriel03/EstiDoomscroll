@@ -481,3 +481,266 @@ class Game2048(private val random: Random = Random.Default) {
         return cell
     }
 }
+
+/**
+ * Sudoku: fill the 9x9 grid so every row, column and 3x3 box holds 1 to 9.
+ * Puzzles are 81 digits row by row, 0 for an empty cell. Givens are fixed.
+ */
+class SudokuBoard(puzzle: String, private val solution: String) {
+    companion object {
+        const val SIZE = 9
+    }
+
+    private val givens = BooleanArray(SIZE * SIZE) { puzzle[it] != '0' }
+    /** Current digits, 0 for empty. */
+    val cells = IntArray(SIZE * SIZE) { puzzle[it] - '0' }
+
+    init {
+        require(puzzle.length == SIZE * SIZE && solution.length == SIZE * SIZE)
+    }
+
+    fun isGiven(index: Int): Boolean = givens[index]
+
+    /** Sets (or with 0 clears) a non-given cell; false for a given. */
+    fun set(index: Int, digit: Int): Boolean {
+        if (givens[index] || digit !in 0..9) return false
+        cells[index] = digit
+        return true
+    }
+
+    /** True when the cell's digit repeats in its row, column or box. */
+    fun conflicts(index: Int): Boolean {
+        val digit = cells[index]
+        if (digit == 0) return false
+        val row = index / SIZE
+        val col = index % SIZE
+        return peers(row, col).any { it != index && cells[it] == digit }
+    }
+
+    val isSolved: Boolean
+        get() = cells.indices.all { cells[it] == solution[it] - '0' }
+
+    val filled: Int
+        get() = cells.count { it != 0 }
+
+    private fun peers(row: Int, col: Int): List<Int> {
+        val boxRow = row / 3 * 3
+        val boxCol = col / 3 * 3
+        return (0 until SIZE).map { row * SIZE + it } +
+            (0 until SIZE).map { it * SIZE + col } +
+            (0 until 9).map { (boxRow + it / 3) * SIZE + boxCol + it % 3 }
+    }
+}
+
+/** Generated puzzles (34 givens) with their unique solutions, checked by the tests. */
+object SudokuPuzzles {
+    val all: List<Pair<String, String>> = listOf(
+        "009060508060091700000050000000406021080903000020015006500007683007500190408039007" to
+            "379264518865391742241758369953476821186923475724815936592147683637582194418639257",
+        "092010000531780204000900003320150709000603005000020300000009000710034000269500430" to
+            "492315687531786294687942153326158749174693825958427316843269571715834962269571438",
+        "130020900076094002092360540000600701000009630013200400040000190057030200300040000" to
+            "134725986576894312892361547489653721725419638613287459248576193957138264361942875",
+        "300200005002059006000083240080400702000320080000008401064000953009504100100930004" to
+            "371246895842759316695183247983415762416327589527698431264871953739564128158932674",
+        "000080600000000480400290003000420800709500234000310905070140000801950700504800096" to
+            "395784621127635489486291573653429817719568234248317965972146358861953742534872196",
+        "043070150005000070070302060320907400400006000050800390500700001800000639032068040" to
+            "243679158695481273178352964326917485489536712751824396564793821817245639932168547",
+        "070810040001000003089604120060325008520000074000000500902000481807900206006000700" to
+            "275813649641792853389654127764325918528169374193487562932576481857941236416238795",
+        "407695000100430570630012000003504017000009800000300200046020091002040008800906000" to
+            "487695123129438576635712489263584917714269835958371264546823791392147658871956342",
+        "020350600800040000000002973300400108000200005000095700937680001560901347402000000" to
+            "721359684893746512645812973359467128176238495284195736937684251568921347412573869",
+        "900000710106037002520600003300050200250100000801000064090421005010009408000800170" to
+            "983542716146937852527618943369754281254186397871293564798421635615379428432865179",
+        "000013004003070980900000601604008302000405006100006450800009017020501003031207000" to
+            "586913724213674985947852631654198372378425196192736458865349217729561843431287569",
+        "089750000175062000603004570840070050030900164000400000000049317090008000504000600" to
+            "489751236175362849623894571846173952732985164951426783268549317397618425514237698",
+        "000004735000090600000000029900830004180047060750102003310750240000021300400006050" to
+            "869214735247593618531678429926835174183947562754162893318759246695421387472386951",
+        "060301000000400620730080005000013006080690002603002800100030004048025701207004050" to
+            "462351987815479623739286145924813576581697432673542819156738294348925761297164358",
+        "708261040004007069003905287000030800026019304400020050002006908005000006000002000" to
+            "798261543254387169163945287517634892826519374439728651372456918985173426641892735",
+        "080790061000600030016003750003000005090026080804000096000032540000409618540100000" to
+            "382795461975614832416283759623948175791526384854371296169832547237459618548167923",
+        "020000005090376001416090008950108000108020000670500100000000307200453010340700060" to
+            "723814695895376421416295738954138276138627954672549183581962347267453819349781562",
+        "001790006206300700700200053050002000003070610007000820374921500060050030900030070" to
+            "531794286286315749749286153658142397423879615197563824374921568862457931915638472",
+        "370000019000037600064000073000000008036050002005100736048279060000001900093800240" to
+            "372486519851937624964512873719623458436758192285194736548279361627341985193865247",
+        "803160400020070030490005010934020070010008020200040560300007000158600700002000301" to
+            "873162459521479836496385217934526178615738924287941563349217685158693742762854391",
+        "342000065000409300800365100709080514200001600010906270070008000000000006004000859" to
+            "342817965651429387897365142769283514285741693413956278976538421528194736134672859",
+        "821003470005004010004108030012406090070082301000301004900000047000000920240000003" to
+            "821563479635794812794128635312456798476982351589371264968235147153847926247619583",
+        "098010200307006001050040000001008956000901020020600047200000400400782095070054010" to
+            "698517234347296581152843769731428956564971328829635147285169473413782695976354812",
+        "906108700000046000402903080001700820620005003007682000009860040000007010000394200" to
+            "956128734783546192412973685541739826628415973397682451239861547864257319175394268",
+        "000400600207560039080003000870605200096000050005000070009030025000724901760051040" to
+            "953417682217568439684293517871645293396172854425389176149836725538724961762951348",
+        "085000010000804020760010040807350100003020085200008904000197050500243001000000270" to
+            "485732619139864527762915348847359162693421785251678934328197456576243891914586273",
+        "608501009597420000001008547900706800860000023000830005006240000000000000410060908" to
+            "648571239597423186231698547923756814865914723174832695786249351359187462412365978",
+        "002005170050726009006000500001060437060248950504000020040050000610002000083091000" to
+            "432985176158726349976314582821569437367248951594173628249657813615832794783491265",
+        "006490803000003190009000005564800007000304906100270000070002600020060040048030729" to
+            "216495873457683192839127465564819237782354916193276584371942658925768341648531729",
+        "001342000260015900400080000014037569059400017000100300000000602086003001000074800" to
+            "591342786268715934437986125814237569359468217672159348743891652986523471125674893",
+    )
+
+    fun random(random: Random = Random.Default): Pair<String, String> = all.random(random)
+}
+
+/**
+ * Stack: a block slides back and forth above the tower, along x and z in
+ * turn; a tap drops it. The overhang is cut off, so the tower narrows with
+ * every miss; a drop within [PERFECT] keeps the full size. Missing the tower
+ * entirely ends the run. Reaching [TARGET] floors unlocks. Units are an
+ * abstract floor plan; the view projects it in 3D.
+ */
+class StackGame(private val random: Random = Random.Default) {
+    companion object {
+        const val BASE_SIZE = 100f
+        const val RANGE = 130f
+        const val PERFECT = 4f
+        const val TARGET = 40
+        const val BASE_SPEED = 110f
+        const val SPEED_STEP = 3f
+        const val MAX_SPEED = 240f
+    }
+
+    enum class State { READY, PLAYING, DEAD, WON }
+
+    /** A placed floor: centre and size on the floor plan. */
+    data class Block(val x: Float, val z: Float, val width: Float, val depth: Float)
+
+    /** The part cut off by the last drop, at the level it was cut, or null. */
+    data class Cut(val block: Block, val level: Int)
+
+    var state = State.READY
+        private set
+    val blocks = mutableListOf<Block>()
+    /** The sliding block; its level is [height] + 1. */
+    var moving: Block = Block(0f, 0f, BASE_SIZE, BASE_SIZE)
+        internal set
+    /** Whether the sliding block moves along x (else along z). */
+    var alongX = true
+        private set
+    private var direction = 1f
+    var lastCut: Cut? = null
+        private set
+    var lastPerfect = false
+        private set
+    /** Consecutive perfect drops, for the view's flourish. */
+    var combo = 0
+        private set
+
+    /** Floors stacked on the base. */
+    val height: Int
+        get() = blocks.size - 1
+
+    val speed: Float
+        get() = (BASE_SPEED + height * SPEED_STEP).coerceAtMost(MAX_SPEED)
+
+    init {
+        reset()
+    }
+
+    /** Tap: start, drop, or (after a fall) get ready for another run. */
+    fun tap() {
+        when (state) {
+            State.READY -> {
+                state = State.PLAYING
+                spawn()
+            }
+            State.PLAYING -> drop()
+            State.DEAD -> reset()
+            State.WON -> Unit
+        }
+    }
+
+    fun step(seconds: Float) {
+        if (state != State.PLAYING) return
+        val top = blocks.last()
+        val centre = if (alongX) top.x else top.z
+        var position = (if (alongX) moving.x else moving.z) + direction * speed * seconds.coerceIn(0f, 0.1f)
+        if (position > centre + RANGE) {
+            position = centre + RANGE
+            direction = -1f
+        } else if (position < centre - RANGE) {
+            position = centre - RANGE
+            direction = 1f
+        }
+        moving = if (alongX) moving.copy(x = position) else moving.copy(z = position)
+    }
+
+    private fun drop() {
+        val top = blocks.last()
+        val level = height + 1
+        val delta = if (alongX) moving.x - top.x else moving.z - top.z
+        val size = if (alongX) moving.width else moving.depth
+        lastPerfect = false
+        val placed: Block
+        if (kotlin.math.abs(delta) <= PERFECT) {
+            placed = top.copy()
+            lastPerfect = true
+            combo++
+            lastCut = null
+        } else {
+            val overlap = size - kotlin.math.abs(delta)
+            combo = 0
+            if (overlap <= 0f) {
+                lastCut = Cut(moving, level)
+                state = State.DEAD
+                return
+            }
+            val sign = if (delta > 0) 1f else -1f
+            placed = if (alongX) {
+                moving.copy(x = top.x + delta / 2, width = overlap)
+            } else {
+                moving.copy(z = top.z + delta / 2, depth = overlap)
+            }
+            // The overhang, beyond the tower's edge on the side it slid past.
+            val cutSize = kotlin.math.abs(delta)
+            val edge = (if (alongX) top.x else top.z) + sign * size / 2
+            val cutCentre = edge + sign * cutSize / 2
+            lastCut = Cut(if (alongX) moving.copy(x = cutCentre, width = cutSize)
+                else moving.copy(z = cutCentre, depth = cutSize), level)
+        }
+        blocks += placed
+        if (height >= TARGET) {
+            state = State.WON
+            return
+        }
+        alongX = !alongX
+        spawn()
+    }
+
+    /** The next block enters from a random side, the size of the top floor. */
+    private fun spawn() {
+        val top = blocks.last()
+        val side = if (random.nextBoolean()) 1f else -1f
+        direction = -side
+        moving = if (alongX) top.copy(x = top.x + side * RANGE) else top.copy(z = top.z + side * RANGE)
+    }
+
+    private fun reset() {
+        state = State.READY
+        blocks.clear()
+        blocks += Block(0f, 0f, BASE_SIZE, BASE_SIZE)
+        alongX = true
+        lastCut = null
+        lastPerfect = false
+        combo = 0
+        moving = Block(0f, 0f, BASE_SIZE, BASE_SIZE)
+    }
+}

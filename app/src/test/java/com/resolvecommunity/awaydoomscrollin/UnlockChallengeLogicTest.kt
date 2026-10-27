@@ -316,7 +316,113 @@ class UnlockChallengeLogicTest {
     }
 
     @Test
+    fun `every sudoku has one solution that matches its givens`() {
+        assertTrue(SudokuPuzzles.all.size >= 20)
+        for ((puzzle, solution) in SudokuPuzzles.all) {
+            for (i in puzzle.indices) assertTrue(puzzle, puzzle[i] == '0' || puzzle[i] == solution[i])
+            val grid = solution.map { it - '0' }
+            for (k in 0 until 9) {
+                assertEquals(solution, (1..9).toSet(), (0 until 9).map { grid[k * 9 + it] }.toSet())
+                assertEquals(solution, (1..9).toSet(), (0 until 9).map { grid[it * 9 + k] }.toSet())
+                assertEquals(solution, (1..9).toSet(),
+                    (0 until 9).map { grid[(k / 3 * 3 + it / 3) * 9 + k % 3 * 3 + it % 3] }.toSet())
+            }
+            assertEquals(puzzle, 1, sudokuSolutions(puzzle.map { it - '0' }.toIntArray(), limit = 2))
+        }
+    }
+
+    /** Counts solutions up to [limit] by backtracking on the most constrained cell. */
+    private fun sudokuSolutions(grid: IntArray, limit: Int): Int {
+        var best = -1
+        var bestOptions: List<Int> = emptyList()
+        for (i in grid.indices) {
+            if (grid[i] != 0) continue
+            val r = i / 9
+            val c = i % 9
+            val used = (0 until 9).flatMap { listOf(grid[r * 9 + it], grid[it * 9 + c],
+                grid[(r / 3 * 3 + it / 3) * 9 + c / 3 * 3 + it % 3]) }.toSet()
+            val options = (1..9).filter { it !in used }
+            if (best < 0 || options.size < bestOptions.size) {
+                best = i
+                bestOptions = options
+            }
+        }
+        if (best < 0) return 1
+        var count = 0
+        for (digit in bestOptions) {
+            grid[best] = digit
+            count += sudokuSolutions(grid, limit - count)
+            grid[best] = 0
+            if (count >= limit) break
+        }
+        return count
+    }
+
+    @Test
+    fun `sudoku keeps givens, flags clashes and knows when it is solved`() {
+        val (puzzle, solution) = SudokuPuzzles.all.first()
+        val board = SudokuBoard(puzzle, solution)
+        val given = puzzle.indexOfFirst { it != '0' }
+        val empty = puzzle.indexOf('0')
+        assertFalse(board.set(given, 5))
+        // The same digit as a given in the empty cell's row clashes.
+        val row = empty / 9
+        val rowGiven = (0 until 9).map { row * 9 + it }.first { puzzle[it] != '0' }
+        assertTrue(board.set(empty, puzzle[rowGiven] - '0'))
+        assertTrue(board.conflicts(empty))
+        assertFalse(board.isSolved)
+        for (i in puzzle.indices) if (puzzle[i] == '0') board.set(i, solution[i] - '0')
+        assertTrue(board.isSolved)
+        assertTrue(board.cells.indices.none { board.conflicts(it) })
+        assertEquals(81, board.filled)
+    }
+
+    @Test
+    fun `stack is won by perfect drops and speeds up`() {
+        val game = StackGame(Random(1))
+        game.tap()
+        assertEquals(StackGame.State.PLAYING, game.state)
+        var seconds = 0f
+        while (game.state == StackGame.State.PLAYING && seconds < 600f) {
+            val top = game.blocks.last()
+            val offset = if (game.alongX) game.moving.x - top.x else game.moving.z - top.z
+            if (kotlin.math.abs(offset) <= 2f) {
+                game.tap()
+                assertTrue(game.lastPerfect)
+            }
+            game.step(1f / 120f)
+            seconds += 1f / 120f
+        }
+        assertEquals(StackGame.State.WON, game.state)
+        assertEquals(StackGame.TARGET, game.height)
+        assertEquals(StackGame.BASE_SIZE, game.blocks.last().width, 0f)
+        assertEquals(StackGame.MAX_SPEED, game.speed, 0f)
+    }
+
+    @Test
+    fun `stack cuts the overhang and falls when it misses`() {
+        val game = StackGame(Random(2))
+        game.tap()
+        // Drop 30 units off along x: the floor keeps 70, the 30 overhang is cut.
+        game.moving = game.moving.copy(x = 30f, z = 0f)
+        game.tap()
+        val floor = game.blocks.last()
+        assertEquals(70f, floor.width, 0.01f)
+        assertEquals(15f, floor.x, 0.01f)
+        assertEquals(30f, game.lastCut!!.block.width, 0.01f)
+        assertEquals(65f, game.lastCut!!.block.x, 0.01f)
+        assertFalse(game.alongX)
+        // Next floor slides along z; a drop beyond its whole depth misses.
+        game.moving = game.moving.copy(z = 120f)
+        game.tap()
+        assertEquals(StackGame.State.DEAD, game.state)
+        game.tap()
+        assertEquals(StackGame.State.READY, game.state)
+        assertEquals(0, game.height)
+    }
+
+    @Test
     fun `every game is registered`() {
-        assertEquals(5, UnlockChallenges.count)
+        assertEquals(7, UnlockChallenges.count)
     }
 }
