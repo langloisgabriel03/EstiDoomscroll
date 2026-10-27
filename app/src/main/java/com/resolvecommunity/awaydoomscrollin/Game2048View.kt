@@ -10,39 +10,79 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import kotlin.math.abs
 
-/** 2048: reach the target tile to unlock. */
+/**
+ * 2048: reach the target tile to unlock. The record is the fastest time to
+ * reach it, timed from the first swipe of a game; it stays on this phone.
+ */
 internal class Game2048Challenge : UnlockChallenge {
     companion object {
-        private const val KEY_RECORD = "game2048_record_score"
+        private const val KEY_RECORD_MS = "game2048_record_ms"
     }
 
     override val title = "2048: reach ${Game2048.TARGET}"
     private var board: Game2048View? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var ticker: Runnable? = null
 
     override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
         val box = ui.column()
-        val stats = ui.text("", 13f, ui.dim)
-        // The record stays on this phone (the app's own preferences).
+        val stats = ui.text("", 15f, style = Typeface.BOLD)
         val prefs = ui.context.getSharedPreferences(ProtectionPreferences.PREFS_NAME, Context.MODE_PRIVATE)
-        var record = prefs.getInt(KEY_RECORD, 0)
-        val recordAtStart = record
-        val view = Game2048View(ui.context, Game2048(), onSolved) { score, best ->
-            if (score > record) {
-                record = score
-                prefs.edit().putInt(KEY_RECORD, record).apply()
+        var recordMs = prefs.getLong(KEY_RECORD_MS, 0L)
+        var startedAt = 0L
+        var finishedMs = -1L
+        var newRecord = false
+        val game = Game2048()
+
+        fun clock(ms: Long) = ReelsWaitConfig.formatCountdown(ms / 1000)
+        fun render() {
+            val elapsed = when {
+                finishedMs >= 0 -> finishedMs
+                startedAt > 0 -> SystemClock.uptimeMillis() - startedAt
+                else -> 0L
             }
-            val beaten = score > recordAtStart && recordAtStart > 0
-            stats.text = "Score: $score  ·  Record: $record" +
-                (if (beaten) "  ·  New record!" else "") +
-                "\nBest tile: $best / ${Game2048.TARGET}"
+            stats.text = "Time ${clock(elapsed)}  ·  Record ${if (recordMs > 0) clock(recordMs) else "--:--"}" +
+                if (newRecord) "  ·  New record!" else ""
+        }
+
+        val view = Game2048View(ui.context, game, onSolved) { moved ->
+            val now = SystemClock.uptimeMillis()
+            if (!moved) {
+                // New game: the clock waits for its first swipe.
+                startedAt = 0L
+                finishedMs = -1L
+            } else if (startedAt == 0L) {
+                startedAt = now
+            }
+            if (moved && game.won && finishedMs < 0) {
+                finishedMs = now - startedAt
+                if (recordMs == 0L || finishedMs < recordMs) {
+                    recordMs = finishedMs
+                    newRecord = true
+                    prefs.edit().putLong(KEY_RECORD_MS, recordMs).apply()
+                }
+            }
+            render()
         }
         board = view
+        val tick = object : Runnable {
+            override fun run() {
+                render()
+                handler.postDelayed(this, 500L)
+            }
+        }
+        ticker = tick
+        handler.post(tick)
+
         box.addView(stats, ui.params())
         box.addView(view, ui.params(top = ui.dp(8)))
         box.addView(ui.text("Swipe to slide the tiles", 13f, ui.dim), ui.params(top = ui.dp(6)))
@@ -51,6 +91,8 @@ internal class Game2048Challenge : UnlockChallenge {
     }
 
     override fun dispose() {
+        ticker?.let { handler.removeCallbacks(it) }
+        ticker = null
         board?.stop()
         board = null
     }
@@ -65,7 +107,8 @@ internal class Game2048View(
     context: Context,
     private val game: Game2048,
     private val onWin: () -> Unit,
-    private val onScore: (score: Int, best: Int) -> Unit
+    /** After a real move (true) or a new game (false). */
+    private val onChanged: (moved: Boolean) -> Unit
 ) : View(context) {
     companion object {
         private const val SLIDE_MS = 100L
@@ -91,7 +134,6 @@ internal class Game2048View(
     init {
         isClickable = true
         contentDescription = "2048 board. Swipe to slide the tiles."
-        report()
     }
 
     fun newGame() {
@@ -100,7 +142,7 @@ internal class Game2048View(
         sliding = emptyList()
         popped = BooleanArray(popped.size) { game.cells[it] != 0 }
         animate(withSlide = false)
-        report()
+        onChanged(false)
     }
 
     fun stop() {
@@ -112,8 +154,6 @@ internal class Game2048View(
         stop()
         super.onDetachedFromWindow()
     }
-
-    private fun report() = onScore(game.score, game.bestTile)
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)
@@ -146,7 +186,7 @@ internal class Game2048View(
                     sliding = game.lastMoves
                     popped = BooleanArray(popped.size) { it in game.lastMerged || it == game.lastSpawn }
                     animate(withSlide = true)
-                    report()
+                    onChanged(true)
                     if (game.won) {
                         reported = true
                         // Let the winning tile show, then unlock (which removes this window).
