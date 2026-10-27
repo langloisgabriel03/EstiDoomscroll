@@ -8,8 +8,6 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.text.Editable
 import android.text.InputFilter
@@ -35,7 +33,7 @@ import kotlin.random.Random
  * Reels Wait fork: a mini-game on the wait screen. Solving it unlocks Reels
  * straight away instead of waiting for the countdown.
  *
- * To add a game: implement this interface and add its constructor to
+ * To add a game: implement this interface and add it, with a short id, to
  * [UnlockChallenges.factories]. Keep its rules in UnlockChallengeLogic.kt so
  * they can be unit tested.
  */
@@ -50,22 +48,36 @@ internal interface UnlockChallenge {
 }
 
 internal object UnlockChallenges {
-    private val factories: List<() -> UnlockChallenge> = listOf(
-        ::TypingChallenge,
-        ::MathChallenge,
-        ::HoldChallenge,
-        ::FlappyChallenge,
-        ::RushHourChallenge,
-        ::Game2048Challenge
+    private const val KEY_BAG = "unlock_game_bag"
+    private const val KEY_LAST = "unlock_game_last"
+
+    /** Ids are stored in the game bag; keep them stable. */
+    private val factories: List<Pair<String, () -> UnlockChallenge>> = listOf(
+        "typing" to ::TypingChallenge,
+        "math" to ::MathChallenge,
+        "flappy" to ::FlappyChallenge,
+        "rushhour" to ::RushHourChallenge,
+        "2048" to ::Game2048Challenge
     )
 
     val count: Int
         get() = factories.size
 
-    fun random(random: Random = Random.Default): UnlockChallenge = factories.random(random)()
+    /**
+     * The next game from a shuffled bag kept in the app's preferences: every
+     * game once, in random order, before any repeats. Closing the wait screen
+     * does not reroll it; the next screen simply takes the next game.
+     */
+    fun next(context: Context, random: Random = Random.Default): UnlockChallenge {
+        val prefs = context.getSharedPreferences(ProtectionPreferences.PREFS_NAME, Context.MODE_PRIVATE)
+        val bag = prefs.getString(KEY_BAG, null).orEmpty().split(',').filter { it.isNotEmpty() }
+        val (id, rest) = GameBag.draw(factories.map { it.first }, bag, prefs.getString(KEY_LAST, null), random)
+        prefs.edit().putString(KEY_BAG, rest.joinToString(",")).putString(KEY_LAST, id).apply()
+        return factories.first { it.first == id }.second()
+    }
 
     /** One fresh instance of every game, for tests. */
-    fun all(): List<UnlockChallenge> = factories.map { it() }
+    fun all(): List<UnlockChallenge> = factories.map { it.second() }
 }
 
 /** Shared look for the wait screen and its games. */
@@ -262,80 +274,6 @@ internal class MathChallenge : UnlockChallenge {
         box.addView(progress, ui.params(top = ui.dp(8)))
         render()
         return box
-    }
-}
-
-/** Hold to unlock: keep a finger on the button; lifting it starts over. */
-internal class HoldChallenge : UnlockChallenge {
-    override val title = "Hold for ${HoldCheck.HOLD_SECONDS} seconds"
-    private val handler = Handler(Looper.getMainLooper())
-    private var tick: Runnable? = null
-
-    @SuppressLint("ClickableViewAccessibility")
-    override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
-        val box = ui.column()
-        val label = ui.text("Press and hold", 18f, style = Typeface.BOLD)
-        val bar = View(ui.context).apply {
-            background = GradientDrawable().apply {
-                cornerRadius = ui.dp(4).toFloat()
-                setColor(ui.green)
-            }
-            pivotX = 0f
-            scaleX = 0f
-        }
-        val pad = ui.text("Hold here", 16f, ui.dim).apply {
-            background = GradientDrawable().apply {
-                cornerRadius = ui.dp(24).toFloat()
-                setStroke(ui.dp(2), Color.argb(160, 255, 255, 255))
-            }
-        }
-        var downAt = 0L
-        var solved = false
-
-        fun update() {
-            val held = if (downAt == 0L) 0L else SystemClock.uptimeMillis() - downAt
-            bar.scaleX = HoldCheck.progress(held)
-            val left = ((HoldCheck.HOLD_SECONDS * 1000L - held).coerceAtLeast(0L) + 999L) / 1000L
-            label.text = if (downAt == 0L) "Press and hold" else "Keep holding… ${left}s"
-            if (!solved && HoldCheck.isDone(held)) {
-                solved = true
-                dispose()
-                onSolved()
-            }
-        }
-
-        val loop = object : Runnable {
-            override fun run() {
-                update()
-                if (downAt != 0L && !solved) handler.postDelayed(this, 100L)
-            }
-        }
-        tick = loop
-        pad.setOnTouchListener { _, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    downAt = SystemClock.uptimeMillis()
-                    handler.removeCallbacks(loop)
-                    handler.post(loop)
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    downAt = 0L
-                    handler.removeCallbacks(loop)
-                    if (!solved) update()
-                }
-            }
-            true
-        }
-        box.addView(label, ui.params())
-        box.addView(bar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ui.dp(8))
-            .apply { topMargin = ui.dp(12) })
-        box.addView(pad, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, ui.dp(140))
-            .apply { topMargin = ui.dp(14) })
-        return box
-    }
-
-    override fun dispose() {
-        tick?.let { handler.removeCallbacks(it) }
     }
 }
 

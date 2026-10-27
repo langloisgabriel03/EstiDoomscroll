@@ -75,14 +75,21 @@ object MathCheck {
         input.trim().toIntOrNull() == problem.answer
 }
 
-/** Hold to unlock: keep a finger down without lifting. */
-object HoldCheck {
-    const val HOLD_SECONDS = 180
-
-    fun progress(heldMs: Long): Float =
-        (heldMs / (HOLD_SECONDS * 1000f)).coerceIn(0f, 1f)
-
-    fun isDone(heldMs: Long): Boolean = heldMs >= HOLD_SECONDS * 1000L
+/**
+ * Picks unlock games like a shuffled deck: every game once, in random order,
+ * then a fresh shuffle. A new round never starts with the game that ended the
+ * last one, so the same game never shows twice in a row.
+ */
+object GameBag {
+    /** The game to show and the bag left after it. Ids no longer offered are dropped. */
+    fun draw(all: List<String>, bag: List<String>, last: String?, random: Random): Pair<String, List<String>> {
+        var remaining = bag.filter { it in all }.distinct()
+        if (remaining.isEmpty()) {
+            remaining = all.shuffled(random)
+            if (remaining.size > 1 && remaining.first() == last) remaining = remaining.drop(1) + remaining.first()
+        }
+        return remaining.first() to remaining.drop(1)
+    }
 }
 
 /**

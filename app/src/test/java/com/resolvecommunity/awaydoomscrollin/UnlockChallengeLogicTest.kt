@@ -56,12 +56,29 @@ class UnlockChallengeLogicTest {
     }
 
     @Test
-    fun `hold needs the full duration`() {
-        val full = HoldCheck.HOLD_SECONDS * 1000L
-        assertFalse(HoldCheck.isDone(full - 1L))
-        assertTrue(HoldCheck.isDone(full))
-        assertEquals(0.5f, HoldCheck.progress(full / 2), 0.001f)
-        assertEquals(1f, HoldCheck.progress(full * 2), 0.001f)
+    fun `game bag shows every game once per round and never twice in a row`() {
+        val all = listOf("typing", "math", "flappy", "rushhour", "2048")
+        for (seed in 1..50) {
+            val random = Random(seed)
+            var bag = emptyList<String>()
+            var last: String? = null
+            val shown = mutableListOf<String>()
+            repeat(all.size * 4) {
+                val (id, rest) = GameBag.draw(all, bag, last, random)
+                shown += id
+                bag = rest
+                last = id
+            }
+            shown.chunked(all.size).forEach { round -> assertEquals(all.toSet(), round.toSet()) }
+            assertTrue(shown.zipWithNext().none { (a, b) -> a == b })
+        }
+    }
+
+    @Test
+    fun `game bag drops games that no longer exist`() {
+        val (id, rest) = GameBag.draw(listOf("a", "b"), listOf("hold", "b", "a"), last = null, Random(1))
+        assertEquals("b", id)
+        assertEquals(listOf("a"), rest)
     }
 
     @Test
@@ -300,6 +317,6 @@ class UnlockChallengeLogicTest {
 
     @Test
     fun `every game is registered`() {
-        assertEquals(6, UnlockChallenges.count)
+        assertEquals(5, UnlockChallenges.count)
     }
 }

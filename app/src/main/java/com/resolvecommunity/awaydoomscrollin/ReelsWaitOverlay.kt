@@ -121,7 +121,7 @@ internal class ReelsWaitOverlay(
         get() = root
 
     /** Returns false when the screen is already visible or cannot be added. */
-    fun show(game: UnlockChallenge = UnlockChallenges.random()): Boolean {
+    fun show(game: UnlockChallenge = UnlockChallenges.next(service)): Boolean {
         if (root != null) return false
         return try {
             val view = buildView(game)
