@@ -18,14 +18,29 @@ import kotlin.math.abs
 
 /** 2048: reach the target tile to unlock. */
 internal class Game2048Challenge : UnlockChallenge {
+    companion object {
+        private const val KEY_RECORD = "game2048_record_score"
+    }
+
     override val title = "2048: reach ${Game2048.TARGET}"
     private var board: Game2048View? = null
 
     override fun createView(ui: ChallengeUi, onSolved: () -> Unit): View {
         val box = ui.column()
         val stats = ui.text("", 13f, ui.dim)
+        // The record stays on this phone (the app's own preferences).
+        val prefs = ui.context.getSharedPreferences(ProtectionPreferences.PREFS_NAME, Context.MODE_PRIVATE)
+        var record = prefs.getInt(KEY_RECORD, 0)
+        val recordAtStart = record
         val view = Game2048View(ui.context, Game2048(), onSolved) { score, best ->
-            stats.text = "Score: $score  ·  Best tile: $best / ${Game2048.TARGET}"
+            if (score > record) {
+                record = score
+                prefs.edit().putInt(KEY_RECORD, record).apply()
+            }
+            val beaten = score > recordAtStart && recordAtStart > 0
+            stats.text = "Score: $score  ·  Record: $record" +
+                (if (beaten) "  ·  New record!" else "") +
+                "\nBest tile: $best / ${Game2048.TARGET}"
         }
         board = view
         box.addView(stats, ui.params())

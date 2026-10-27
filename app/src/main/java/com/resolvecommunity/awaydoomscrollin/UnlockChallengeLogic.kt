@@ -342,7 +342,7 @@ object RushHourLevels {
 class Game2048(private val random: Random = Random.Default) {
     companion object {
         const val SIZE = 4
-        const val TARGET = 512
+        const val TARGET = 2048
     }
 
     enum class Direction { LEFT, RIGHT, UP, DOWN }
