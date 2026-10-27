@@ -396,7 +396,9 @@ class UnlockChallengeLogicTest {
         assertEquals(StackGame.State.WON, game.state)
         assertEquals(StackGame.TARGET, game.height)
         assertEquals(StackGame.BASE_SIZE, game.blocks.last().width, 0f)
-        assertEquals(StackGame.MAX_SPEED, game.speed, 0f)
+        assertEquals(minOf(StackGame.MAX_SPEED, StackGame.BASE_SPEED + StackGame.TARGET * StackGame.SPEED_STEP),
+            game.speed, 0f)
+        assertTrue(game.speed > StackGame.BASE_SPEED)
     }
 
     @Test
