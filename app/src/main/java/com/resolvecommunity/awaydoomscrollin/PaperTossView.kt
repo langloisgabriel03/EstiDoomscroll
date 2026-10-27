@@ -106,11 +106,6 @@ internal class PaperTossView(
         Choreographer.getInstance().removeFrameCallback(frame)
     }
 
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        start()
-    }
-
     override fun onDetachedFromWindow() {
         stop()
         super.onDetachedFromWindow()
@@ -123,7 +118,7 @@ internal class PaperTossView(
         Choreographer.getInstance().postFrameCallback(frame)
     }
 
-    /** The fan keeps turning while the game is on screen; it shows the wind. */
+    /** Runs only while the ball flies and its result shows; the fan turns meanwhile. */
     private fun onFrame(now: Long) {
         if (!running) return
         val dt = if (lastFrame == 0L) 0f else ((now - lastFrame) / 1_000_000_000f).coerceAtMost(0.05f)
@@ -139,8 +134,11 @@ internal class PaperTossView(
             game.next()
         }
         invalidate()
-        if (game.state == PaperTossGame.State.WON) running = false
-        else Choreographer.getInstance().postFrameCallback(frame)
+        if (game.state == PaperTossGame.State.FLYING || resultUntil != 0L) {
+            Choreographer.getInstance().postFrameCallback(frame)
+        } else {
+            running = false
+        }
     }
 
     private fun onLanded() {
