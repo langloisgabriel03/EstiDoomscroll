@@ -4,8 +4,8 @@
 > endorsed by Resolve Community, Meta or Instagram. The fork installs as
 > `com.gab.reelswait` under the name "Reels Wait" and replaces the hard block
 > on Instagram Reels with a wait timer: a countdown (or a quick mini-game),
-> then a short window where Instagram is unguarded. Games: typing, sums,
-> a Flappy Bird clone, Rush Hour, 2048, Sudoku, Stack and Paper Toss, dealt like a
+> then a short window where Instagram is unguarded. Games: Rush Hour,
+> 2048, Sudoku, Stack and Paper Toss, dealt like a
 > shuffled deck. It also keeps the Instagram
 > Home and YouTube feeds open (`ReelsWaitConfig.KEEP_FEEDS_OPEN`), so only Reels,
 > Shorts and Instagram's suggested Explore grid are blocked; search still works. The rest of this README describes the upstream app.

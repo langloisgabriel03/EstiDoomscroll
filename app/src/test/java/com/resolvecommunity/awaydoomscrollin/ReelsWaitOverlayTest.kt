@@ -72,21 +72,4 @@ class ReelsWaitOverlayTest {
             assertEquals(null, overlay.viewForTest)
         }
     }
-
-    @Test
-    fun `typing game unlocks on an exact copy`() {
-        val service = Robolectric.setupService(TestService::class.java)
-        var unlocked = 0
-        val overlay = ReelsWaitOverlay(service, onUnlock = { unlocked++ }, onDismiss = {})
-        val game = TypingChallenge()
-        assertTrue(overlay.show(game))
-        val root = overlay.viewForTest!!
-        drawn(root)
-        val sentence = views(root).filterIsInstance<TextView>()
-            .first { it !is EditText && it.text.toString() in TypingCheck.sentences }
-            .text.toString()
-        views(root).filterIsInstance<EditText>().single().setText(sentence)
-        assertEquals(1, unlocked)
-        assertEquals(null, overlay.viewForTest)
-    }
 }
