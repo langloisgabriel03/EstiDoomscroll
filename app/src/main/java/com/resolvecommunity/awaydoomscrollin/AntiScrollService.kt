@@ -36,6 +36,9 @@ class AntiScrollService : AccessibilityService() {
         private const val YOUTUBE_SOURCE_PATH_DEPTH = 24
         private const val INSTAGRAM_EXIT_TREE_QUIET_MS = 220L
         private const val REELS_WAIT_SETTLE_MS = 800L
+        // A post viewer opened from Explore jumps to the chosen post first.
+        private const val REELS_WAIT_VIEWER_OPEN_MS = 700L
+        private const val REELS_WAIT_VIEWER_BACK_MS = 250L
         private const val REELS_WAIT_REMOVE_MS = 300L
         private const val INSTAGRAM_VIEWER_EXIT_RETRY_MS = 500L
         private const val DIRECT_MODAL_COVER_MAX_MS = 1_500L
@@ -555,9 +558,12 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             },
             onReelsTabBlocked = ::onInstagramReelsGuardTapped,
             onEntryGuardTap = ::onInstagramReelsGuardTapped,
-            onCurtainTap = { screen ->
+            onCurtainTap = { screen, x, y ->
                 // Explore's suggested grid is Reels-heavy: same wait/game unlock.
-                if (screen == InstagramScreen.EXPLORE) onInstagramReelsGuardTapped()
+                // A curtain left over account search results passes the tap on.
+                if (screen == InstagramScreen.EXPLORE && !passCurtainTapToAccountSearch(x, y)) {
+                    onInstagramReelsGuardTapped()
+                }
             }
         )
     }
@@ -568,6 +574,13 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         ReelsWaitOverlay(this, onUnlock = ::unlockInstagramReels, onDismiss = ::onReelsWaitDismissed)
     }
     private var reelsWaitSuppressedUntil = 0L
+    // Reels Wait fork: where the open post or Reel viewer came from, and how
+    // far it has been scrolled (see ReelsWaitViewerPolicy).
+    private var reelsWaitViewerOrigin: InstagramScreen? = null
+    private var reelsWaitViewerEnteredAt = 0L
+    private val reelsWaitViewerScroll by lazy {
+        ViewerScrollBudget((resources.displayMetrics.heightPixels * 0.5f).toInt())
+    }
 
     private val reelsRelockCheck = Runnable {
         if (!instagramGuardActive()) return@Runnable
@@ -575,6 +588,27 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         Log.d(TAG, "REELS_WAIT_WINDOW_EXPIRED")
         updateInstagramStructuralNodeAccess(true)
         queueInstagramScan(0L)
+    }
+
+    /**
+     * Reels Wait fork: typing in search shows account results where the
+     * Explore grid was, and its curtain can lag behind for a moment. A tap
+     * there is a search, not a Reel: drop the curtain and open the account.
+     */
+    private fun passCurtainTapToAccountSearch(x: Float, y: Float): Boolean {
+        val root = instagramAppRoot() ?: return false
+        val editor = root.findAccessibilityNodeInfosByViewId(
+            "$INSTAGRAM_PACKAGE:id/action_bar_search_edit_text").firstOrNull { it.isVisibleToUser }
+            ?: return false
+        val rows = root.findAccessibilityNodeInfosByViewId(
+            "$INSTAGRAM_PACKAGE:id/row_search_user_container").filter { it.isVisibleToUser }
+        if (rows.isEmpty() && !editor.isFocused) return false
+        Log.d(TAG, "REELS_WAIT_CURTAIN_TAP_TO_SEARCH rows=${rows.size} focused=${editor.isFocused}")
+        hideInstagramContentOverlay()
+        rows.firstOrNull { Rect().also(it::getBoundsInScreen).contains(x.toInt(), y.toInt()) }
+            ?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        queueInstagramScan(48L)
+        return true
     }
 
     private fun onInstagramReelsGuardTapped() {
@@ -2377,6 +2411,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             }
         }
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            if (handleReelsWaitViewerScroll(event)) return
             if (handleBalancedInstagramReelScroll(event)) return
             if (lastInstagramScreen == InstagramScreen.NOTIFICATIONS) {
                 val root = rootInActiveWindow
@@ -2843,13 +2878,14 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             root,
             directLaunchPending = scanNow < directReelLaunchPendingUntil)
         logSlowInstagramStage("fast-viewer", stageStarted)
-        // Reels Wait fork: comments opened on a Home-feed video sit over that
-        // video's player, which reads like a Reel. With the feed open, a
-        // comment sheet over verified Home is not a Reel. Checked only when a
-        // Reel is suspected, as the sheet probe walks every window.
+        // Reels Wait fork: comments opened on a Home-feed video or an open
+        // post sit over that video's player, which reads like a Reel (or, from
+        // Explore, like Explore behind). A comment sheet there keeps the
+        // screen. Checked only when needed, as the sheet probe walks every window.
         val commentsOverHome by lazy {
             ReelsWaitConfig.KEEP_FEEDS_OPEN &&
-                instagramStateMachine.currentScreen == InstagramScreen.HOME_FEED &&
+                ReelsWaitViewerPolicy.keepsScreenUnderComments(
+                    instagramStateMachine.currentScreen, InstagramScreen.REELS) &&
                 hasFastCommentSheet(root)
         }
         if (fastReelsViewer && !keepVerifiedHome && !commentsOverHome) {
@@ -2870,6 +2906,21 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                 return
             }
             if (allowBalancedInstagramProfilePost(root)) return
+            if (ReelsWaitConfig.KEEP_FEEDS_OPEN &&
+                instagramStateMachine.currentScreen == InstagramScreen.HOME_FEED) {
+                // Reels Wait fork: Home's own posts stay open; verified Home
+                // is kept so its video player rebuilds never read as a Reel.
+                return
+            }
+            if (ReelsWaitConfig.KEEP_FEEDS_OPEN) {
+                // Reels Wait fork: the post stays open. Record it, so the
+                // Explore curtain behind it is not kept over its comments and
+                // a scroll on to the next suggestion is caught.
+                hideInstagramContentOverlay()
+                cancelInstagramExit()
+                observeInstagramScreen(InstagramScreen.COMMENTS_OR_DETAIL, root.windowId)
+                return
+            }
             exitBlockedViewer(root, windowBounds, InstagramScreen.COMMENTS_OR_DETAIL)
             return
         }
@@ -3173,9 +3224,11 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                 Log.d(TAG, "IG_HOME_PLAYER_MUTATION_IGNORED window=${root.windowId}")
                 InstagramScreen.HOME_FEED
             }
-            classifiedScreen == InstagramScreen.REELS && commentsOverHome -> {
-                Log.d(TAG, "IG_HOME_COMMENTS_KEPT window=${root.windowId}")
-                InstagramScreen.HOME_FEED
+            ReelsWaitViewerPolicy.keepsScreenUnderComments(
+                instagramStateMachine.currentScreen, classifiedScreen) && commentsOverHome -> {
+                Log.d(TAG, "IG_COMMENTS_KEPT window=${root.windowId} " +
+                    "screen=${instagramStateMachine.currentScreen}")
+                instagramStateMachine.currentScreen
             }
             else -> classifiedScreen
         }
@@ -4248,6 +4301,40 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         instagramBalancedCollectionReelIntentUntil = 0L
         Log.d(TAG, "IG_BALANCED_REEL_ALLOWED ingress=$ingress")
         observeInstagramScreen(InstagramScreen.REELS, root.windowId)
+        return true
+    }
+
+    /**
+     * Reels Wait fork: a post or Reel opened from Explore or search may be
+     * read, but scrolling on to the next suggestion goes back and opens the
+     * wait screen. Comment sheets and sideways carousels scroll freely.
+     */
+    private fun handleReelsWaitViewerScroll(event: AccessibilityEvent): Boolean {
+        if (!ReelsWaitConfig.KEEP_FEEDS_OPEN ||
+            !ReelsWaitViewerPolicy.blocksScroll(reelsWaitViewerOrigin)) return false
+        val screen = instagramStateMachine.currentScreen
+        if (screen != InstagramScreen.REELS && screen != InstagramScreen.COMMENTS_OR_DETAIL) return false
+        val now = SystemClock.uptimeMillis()
+        // The viewer jumps to the chosen post as it opens; that is not a swipe.
+        if (now - reelsWaitViewerEnteredAt < REELS_WAIT_VIEWER_OPEN_MS ||
+            now - event.eventTime !in 0L..1_500L) return false
+        val ids = linkedSetOf<String>()
+        var node = event.source
+        var depth = 0
+        while (node != null && depth++ < 12) {
+            ids.add(compactId(node.viewIdResourceName))
+            node = node.parent
+        }
+        if (ReelsWaitViewerPolicy.isSheetPath(ids)) return false
+        val dx = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) event.scrollDeltaX else 0
+        val dy = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) event.scrollDeltaY else 0
+        if (!reelsWaitViewerScroll.add(dx, dy, event.fromIndex)) return false
+        Log.d(TAG, "REELS_WAIT_VIEWER_SCROLL origin=$reelsWaitViewerOrigin screen=$screen")
+        reelsWaitViewerScroll.reset()
+        reelsWaitViewerOrigin = null
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        // Let Back land on the (covered) origin before the wait screen opens.
+        mainHandler.postDelayed({ onInstagramReelsBlocked(userTap = true) }, REELS_WAIT_VIEWER_BACK_MS)
         return true
     }
 
@@ -9156,6 +9243,12 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         windowId: Int
     ): InstagramProtectionDecision {
         val previous = instagramStateMachine.currentScreen
+        val viewerOrigin = ReelsWaitViewerPolicy.origin(previous, screen, reelsWaitViewerOrigin)
+        if (viewerOrigin != reelsWaitViewerOrigin) {
+            reelsWaitViewerOrigin = viewerOrigin
+            reelsWaitViewerEnteredAt = SystemClock.uptimeMillis()
+            reelsWaitViewerScroll.reset()
+        }
         if (screen == InstagramScreen.SAVED_COLLECTION &&
             (previous == InstagramScreen.EXPLORE || previous == InstagramScreen.HOME_FEED)) {
             // Its bookmark button opened Saved; Back returns to this feed.

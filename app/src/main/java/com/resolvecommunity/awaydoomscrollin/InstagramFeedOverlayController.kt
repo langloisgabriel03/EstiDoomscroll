@@ -46,8 +46,9 @@ internal class InstagramFeedOverlayController(
     private val onReelsTabBlocked: () -> Unit = onBlockedTouch,
     private val onEntryGuardTap: () -> Unit = onBlockedTouch,
     // Reels Wait fork: a tap (not a swipe) on a content curtain, with the
-    // curtain's screen. The Explore curtain uses it to open the wait screen.
-    private val onCurtainTap: (InstagramScreen) -> Unit = {}
+    // curtain's screen and where it landed. The Explore curtain uses it to
+    // open the wait screen.
+    private val onCurtainTap: (screen: InstagramScreen, rawX: Float, rawY: Float) -> Unit = { _, _, _ -> }
 ) {
     companion object {
         private const val TAG = "InstagramOverlay"
@@ -1142,7 +1143,7 @@ internal class InstagramFeedOverlayController(
                         if (tap) {
                             currentCopyKey?.substringBefore(':')
                                 ?.let { name -> InstagramScreen.entries.firstOrNull { it.name == name } }
-                                ?.let(onCurtainTap)
+                                ?.let { onCurtainTap(it, event.rawX, event.rawY) }
                         }
                         view.performClick()
                     }
