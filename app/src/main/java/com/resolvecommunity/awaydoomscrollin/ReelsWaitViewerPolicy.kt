@@ -67,3 +67,28 @@ internal class ViewerScrollBudget(private val limitPx: Int) {
         return total >= limitPx
     }
 }
+
+/**
+ * Swipes in a Reel viewer's video pager. Opened from anywhere (a Reel in the
+ * Home feed, a DM, Explore), the chosen Reel plays, but swiping to another
+ * video is the Reels feed. Small layout nudges are not a swipe: it takes a
+ * new page, or a vertical move of at least [minDy] pixels.
+ */
+internal class ReelPagerSwipe(private val minDy: Int, private val idleMs: Long = 5_000L) {
+    private val motion = InstagramReelsPagerMotion()
+    private var lastAt = Long.MIN_VALUE
+
+    fun observe(now: Long, dx: Int, dy: Int, fromIndex: Int, scrollY: Int): Boolean {
+        // A long pause means a new viewer: forget the old page index.
+        if (lastAt == Long.MIN_VALUE || now - lastAt > idleMs) motion.reset()
+        lastAt = now
+        val moved = motion.observe(dx, dy, fromIndex, scrollY)
+        if (!moved) return false
+        return dy == 0 || kotlin.math.abs(dy) >= minDy
+    }
+
+    fun reset() {
+        motion.reset()
+        lastAt = Long.MIN_VALUE
+    }
+}

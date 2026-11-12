@@ -54,4 +54,19 @@ class ReelsWaitViewerPolicyTest {
         assertFalse(budget.add(dx = 0, dy = 0, fromIndex = 0))
         assertTrue(budget.add(dx = 0, dy = 0, fromIndex = 1))
     }
+
+    @Test
+    fun `a swipe to the next reel is caught, nudges are not`() {
+        val swipe = ReelPagerSwipe(minDy = 500)
+        assertFalse(swipe.observe(now = 0, dx = 0, dy = 0, fromIndex = 0, scrollY = -1))
+        assertFalse(swipe.observe(now = 100, dx = 0, dy = 20, fromIndex = 0, scrollY = -1))
+        assertFalse(swipe.observe(now = 200, dx = 300, dy = 10, fromIndex = 0, scrollY = -1))
+        assertTrue(swipe.observe(now = 300, dx = 0, dy = 900, fromIndex = 0, scrollY = -1))
+        swipe.reset()
+        // A pager that reports no delta: a new page index.
+        assertFalse(swipe.observe(now = 0, dx = 0, dy = 0, fromIndex = 0, scrollY = -1))
+        // After a long pause the index starts over, so the first one is a baseline.
+        assertFalse(swipe.observe(now = 60_000, dx = 0, dy = 0, fromIndex = 1, scrollY = -1))
+        assertTrue(swipe.observe(now = 60_100, dx = 0, dy = 0, fromIndex = 2, scrollY = -1))
+    }
 }

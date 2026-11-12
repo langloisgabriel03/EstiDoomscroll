@@ -581,6 +581,9 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private val reelsWaitViewerScroll by lazy {
         ViewerScrollBudget((resources.displayMetrics.heightPixels * 0.5f).toInt())
     }
+    private val reelsWaitPagerSwipe by lazy {
+        ReelPagerSwipe((resources.displayMetrics.heightPixels * 0.25f).toInt())
+    }
 
     private val reelsRelockCheck = Runnable {
         if (!instagramGuardActive()) return@Runnable
@@ -4310,32 +4313,51 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
      * wait screen. Comment sheets and sideways carousels scroll freely.
      */
     private fun handleReelsWaitViewerScroll(event: AccessibilityEvent): Boolean {
-        if (!ReelsWaitConfig.KEEP_FEEDS_OPEN ||
-            !ReelsWaitViewerPolicy.blocksScroll(reelsWaitViewerOrigin)) return false
-        val screen = instagramStateMachine.currentScreen
-        if (screen != InstagramScreen.REELS && screen != InstagramScreen.COMMENTS_OR_DETAIL) return false
+        if (!ReelsWaitConfig.KEEP_FEEDS_OPEN) return false
         val now = SystemClock.uptimeMillis()
-        // The viewer jumps to the chosen post as it opens; that is not a swipe.
-        if (now - reelsWaitViewerEnteredAt < REELS_WAIT_VIEWER_OPEN_MS ||
-            now - event.eventTime !in 0L..1_500L) return false
+        if (now - event.eventTime !in 0L..1_500L) return false
+        // Every Instagram scroll comes here: walk only a few parents (the
+        // pager is the source or just above it) unless an Explore viewer is open.
+        val maxDepth = if (ReelsWaitViewerPolicy.blocksScroll(reelsWaitViewerOrigin)) 12 else 4
         val ids = linkedSetOf<String>()
         var node = event.source
         var depth = 0
-        while (node != null && depth++ < 12) {
-            ids.add(compactId(node.viewIdResourceName))
+        while (node != null && depth++ < maxDepth) {
+            val id = compactId(node.viewIdResourceName)
+            ids.add(id)
+            if (id in InstagramReelsIdentity.pagerIds) break
             node = node.parent
         }
         if (ReelsWaitViewerPolicy.isSheetPath(ids)) return false
         val dx = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) event.scrollDeltaX else 0
         val dy = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) event.scrollDeltaY else 0
+        // A Reel viewer's video pager, wherever it was opened from (a Reel in
+        // the Home feed keeps the Home state): the next video is the Reels feed.
+        if (InstagramReelsIdentity.isVideoPagerPath(ids)) {
+            if (!reelsWaitPagerSwipe.observe(now, dx, dy, event.fromIndex, event.scrollY)) return false
+            Log.d(TAG, "REELS_WAIT_PAGER_SWIPE screen=${instagramStateMachine.currentScreen}")
+            reelsWaitPagerSwipe.reset()
+            blockViewerScroll()
+            return true
+        }
+        if (!ReelsWaitViewerPolicy.blocksScroll(reelsWaitViewerOrigin)) return false
+        val screen = instagramStateMachine.currentScreen
+        if (screen != InstagramScreen.REELS && screen != InstagramScreen.COMMENTS_OR_DETAIL) return false
+        // The viewer jumps to the chosen post as it opens; that is not a swipe.
+        if (now - reelsWaitViewerEnteredAt < REELS_WAIT_VIEWER_OPEN_MS) return false
         if (!reelsWaitViewerScroll.add(dx, dy, event.fromIndex)) return false
         Log.d(TAG, "REELS_WAIT_VIEWER_SCROLL origin=$reelsWaitViewerOrigin screen=$screen")
+        blockViewerScroll()
+        return true
+    }
+
+    /** Back out of the viewer, then the wait screen. */
+    private fun blockViewerScroll() {
         reelsWaitViewerScroll.reset()
         reelsWaitViewerOrigin = null
         performGlobalAction(GLOBAL_ACTION_BACK)
         // Let Back land on the (covered) origin before the wait screen opens.
         mainHandler.postDelayed({ onInstagramReelsBlocked(userTap = true) }, REELS_WAIT_VIEWER_BACK_MS)
-        return true
     }
 
     private fun handleBalancedInstagramReelScroll(event: AccessibilityEvent): Boolean {
