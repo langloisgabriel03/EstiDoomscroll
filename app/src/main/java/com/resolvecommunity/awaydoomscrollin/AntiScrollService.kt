@@ -39,6 +39,10 @@ class AntiScrollService : AccessibilityService() {
         // A post viewer opened from Explore jumps to the chosen post first.
         private const val REELS_WAIT_VIEWER_OPEN_MS = 700L
         private const val REELS_WAIT_VIEWER_BACK_MS = 250L
+        // Only one Back per closed viewer: a second one scrolls Home to the top.
+        private const val REELS_WAIT_VIEWER_BACK_LATCH_MS = 1_500L
+        private const val REELS_WAIT_HOME_VIEWER_CONFIRM_MS = 800L
+        private const val REELS_WAIT_HOME_VIEWER_RECHECK_MS = 150L
         private const val REELS_WAIT_REMOVE_MS = 300L
         private const val INSTAGRAM_VIEWER_EXIT_RETRY_MS = 500L
         private const val DIRECT_MODAL_COVER_MAX_MS = 1_500L
@@ -581,6 +585,8 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private val reelsWaitViewerScroll by lazy {
         ViewerScrollBudget((resources.displayMetrics.heightPixels * 0.5f).toInt())
     }
+    private var reelsWaitHomeViewerSeenAt = 0L
+    private var reelsWaitViewerBackUntil = 0L
     private val reelsWaitPagerSwipe by lazy {
         ReelPagerSwipe((resources.displayMetrics.heightPixels * 0.25f).toInt())
     }
@@ -2891,6 +2897,24 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                     instagramStateMachine.currentScreen, InstagramScreen.REELS) &&
                 hasFastCommentSheet(root)
         }
+        // Reels Wait fork: verified Home ignores its own video players, but a
+        // feed Reel tapped open becomes the full-screen Reel viewer: its pager,
+        // a Back control and no Home header. Seen on two scans in a row (a
+        // player rebuild is gone by then), it is closed for the wait screen.
+        if (ReelsWaitConfig.KEEP_FEEDS_OPEN && fastReelsViewer && keepVerifiedHome &&
+            !commentsOverHome &&
+            (igVisible(root, "clips_viewer_view_pager") || igVisible(root, "clips_view_pager")) &&
+            !igVisible(root, "main_feed_action_bar") && hasFastActionBarBack(root)) {
+            if (scanNow - reelsWaitHomeViewerSeenAt in 0L..REELS_WAIT_HOME_VIEWER_CONFIRM_MS) {
+                reelsWaitHomeViewerSeenAt = 0L
+                Log.d(TAG, "REELS_WAIT_HOME_REEL_OPENED")
+                blockViewerScroll()
+            } else {
+                reelsWaitHomeViewerSeenAt = scanNow
+                queueInstagramScan(REELS_WAIT_HOME_VIEWER_RECHECK_MS)
+            }
+            return
+        }
         if (fastReelsViewer && !keepVerifiedHome && !commentsOverHome) {
             exitBlockedViewer(root, instagramWindowBounds(root), InstagramScreen.REELS)
             return
@@ -4315,6 +4339,9 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
     private fun handleReelsWaitViewerScroll(event: AccessibilityEvent): Boolean {
         if (!ReelsWaitConfig.KEEP_FEEDS_OPEN) return false
         val now = SystemClock.uptimeMillis()
+        // The viewer is already closing: its last scroll frames must not
+        // send a second Back, which would scroll the Home feed to the top.
+        if (now < reelsWaitViewerBackUntil) return true
         if (now - event.eventTime !in 0L..1_500L) return false
         // Every Instagram scroll comes here: walk only a few parents (the
         // pager is the source or just above it) unless an Explore viewer is open.
@@ -4353,6 +4380,10 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
 
     /** Back out of the viewer, then the wait screen. */
     private fun blockViewerScroll() {
+        val now = SystemClock.uptimeMillis()
+        if (now < reelsWaitViewerBackUntil) return
+        reelsWaitViewerBackUntil = now + REELS_WAIT_VIEWER_BACK_LATCH_MS
+        reelsWaitPagerSwipe.reset()
         reelsWaitViewerScroll.reset()
         reelsWaitViewerOrigin = null
         performGlobalAction(GLOBAL_ACTION_BACK)
