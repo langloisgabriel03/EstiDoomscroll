@@ -29,11 +29,18 @@ internal object ReelsWaitViewerPolicy {
      * video, sits over that video's player. It must not read as a Reel launch.
      */
     fun keepsScreenUnderComments(current: InstagramScreen, classified: InstagramScreen): Boolean =
-        current in setOf(InstagramScreen.HOME_FEED, InstagramScreen.COMMENTS_OR_DETAIL,
-            InstagramScreen.EXPLORE, InstagramScreen.SEARCH_RESULTS) &&
-            (classified == InstagramScreen.REELS || classified == InstagramScreen.EXPLORE)
+        (classified == InstagramScreen.REELS &&
+            current in setOf(InstagramScreen.HOME_FEED, InstagramScreen.COMMENTS_OR_DETAIL,
+                InstagramScreen.EXPLORE, InstagramScreen.SEARCH_RESULTS)) ||
+            // A sheet hides the open post, so the grid behind it classifies as
+            // Explore. Only an open post can be covered this way.
+            (classified == InstagramScreen.EXPLORE && current == InstagramScreen.COMMENTS_OR_DETAIL)
 
     /** The ids of a scroll's ancestors that mean a comment or share sheet, not the viewer. */
+    /** Share sheet controls, which carry no stable ids: exact visible texts. */
+    val shareSheetTexts = setOf("send", "copy link", "add to story", "send separately",
+        "gönder", "bağlantıyı kopyala", "hikayene ekle")
+
     fun isSheetPath(ids: Set<String>): Boolean = ids.any {
         it in InstagramReelsIdentity.safeSheetIds ||
             it == "bottom_sheet_container" || it == "layout_container_bottom_sheet"

@@ -2895,7 +2895,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             ReelsWaitConfig.KEEP_FEEDS_OPEN &&
                 ReelsWaitViewerPolicy.keepsScreenUnderComments(
                     instagramStateMachine.currentScreen, InstagramScreen.REELS) &&
-                (hasFastCommentSheet(root) || hasFastBottomSheet(root))
+                (hasFastCommentSheet(root) || hasFastBottomSheet(root) || hasFastShareSheet(root))
         }
         // Reels Wait fork: verified Home ignores its own video players, but a
         // feed Reel tapped open becomes the full-screen Reel viewer: its pager,
@@ -4471,6 +4471,20 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         if (!igVisible(root, "row_feed_profile_header")) return false
         return igVisible(root, "row_feed_photo_imageview") || igVisible(root, "media_group") ||
             igVisible(root, "row_feed_view_group_buttons")
+    }
+
+    /** The share sheet ("Send", "Copy link"...) has no stable ids: match its labels. */
+    private fun hasFastShareSheet(root: AccessibilityNodeInfo): Boolean {
+        fun inRoot(node: AccessibilityNodeInfo): Boolean =
+            ReelsWaitViewerPolicy.shareSheetTexts.any { label ->
+                node.findAccessibilityNodeInfosByText(label).any {
+                    it.isVisibleToUser && it.text?.toString()?.trim()
+                        ?.lowercase(java.util.Locale.ROOT) == label
+                }
+            }
+        return runCatching { inRoot(root) }.getOrDefault(false) || windows.any { window ->
+            runCatching { window.root?.let(::inRoot) == true }.getOrDefault(false)
+        }
     }
 
     /** Any bottom sheet (share, comments, more) over the current screen. */

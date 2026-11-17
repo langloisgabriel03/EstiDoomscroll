@@ -38,6 +38,9 @@ class ReelsWaitViewerPolicyTest {
         assertTrue(ReelsWaitViewerPolicy.keepsScreenUnderComments(COMMENTS_OR_DETAIL, REELS))
         assertTrue(ReelsWaitViewerPolicy.keepsScreenUnderComments(HOME_FEED, REELS))
         assertTrue(ReelsWaitViewerPolicy.keepsScreenUnderComments(EXPLORE, REELS))
+        // The share sheet hides the post: the grid behind classifies as Explore.
+        assertTrue(ReelsWaitViewerPolicy.keepsScreenUnderComments(COMMENTS_OR_DETAIL, EXPLORE))
+        assertFalse(ReelsWaitViewerPolicy.keepsScreenUnderComments(EXPLORE, EXPLORE))
         assertFalse(ReelsWaitViewerPolicy.keepsScreenUnderComments(InstagramScreen.PROFILE, REELS))
         assertTrue(ReelsWaitViewerPolicy.isSheetPath(setOf("list", "bottom_sheet_container")))
         assertFalse(ReelsWaitViewerPolicy.isSheetPath(setOf("list")))
