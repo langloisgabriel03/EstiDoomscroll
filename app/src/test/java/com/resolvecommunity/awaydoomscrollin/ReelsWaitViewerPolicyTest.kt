@@ -37,7 +37,8 @@ class ReelsWaitViewerPolicyTest {
         assertTrue(ReelsWaitViewerPolicy.keepsScreenUnderComments(COMMENTS_OR_DETAIL, EXPLORE))
         assertTrue(ReelsWaitViewerPolicy.keepsScreenUnderComments(COMMENTS_OR_DETAIL, REELS))
         assertTrue(ReelsWaitViewerPolicy.keepsScreenUnderComments(HOME_FEED, REELS))
-        assertFalse(ReelsWaitViewerPolicy.keepsScreenUnderComments(EXPLORE, REELS))
+        assertTrue(ReelsWaitViewerPolicy.keepsScreenUnderComments(EXPLORE, REELS))
+        assertFalse(ReelsWaitViewerPolicy.keepsScreenUnderComments(InstagramScreen.PROFILE, REELS))
         assertTrue(ReelsWaitViewerPolicy.isSheetPath(setOf("list", "bottom_sheet_container")))
         assertFalse(ReelsWaitViewerPolicy.isSheetPath(setOf("list")))
     }

@@ -2895,7 +2895,7 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             ReelsWaitConfig.KEEP_FEEDS_OPEN &&
                 ReelsWaitViewerPolicy.keepsScreenUnderComments(
                     instagramStateMachine.currentScreen, InstagramScreen.REELS) &&
-                hasFastCommentSheet(root)
+                (hasFastCommentSheet(root) || hasFastBottomSheet(root))
         }
         // Reels Wait fork: verified Home ignores its own video players, but a
         // feed Reel tapped open becomes the full-screen Reel viewer: its pager,
@@ -3255,7 +3255,11 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                 instagramStateMachine.currentScreen, classifiedScreen) && commentsOverHome -> {
                 Log.d(TAG, "IG_COMMENTS_KEPT window=${root.windowId} " +
                     "screen=${instagramStateMachine.currentScreen}")
-                instagramStateMachine.currentScreen
+                // Over Explore or search the post is the open surface, not the
+                // curtained grid beneath it.
+                instagramStateMachine.currentScreen.takeUnless {
+                    it == InstagramScreen.EXPLORE || it == InstagramScreen.SEARCH_RESULTS
+                } ?: InstagramScreen.COMMENTS_OR_DETAIL
             }
             else -> classifiedScreen
         }
@@ -4467,6 +4471,15 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         if (!igVisible(root, "row_feed_profile_header")) return false
         return igVisible(root, "row_feed_photo_imageview") || igVisible(root, "media_group") ||
             igVisible(root, "row_feed_view_group_buttons")
+    }
+
+    /** Any bottom sheet (share, comments, more) over the current screen. */
+    private fun hasFastBottomSheet(root: AccessibilityNodeInfo): Boolean {
+        fun inRoot(node: AccessibilityNodeInfo) =
+            igVisible(node, "bottom_sheet_container") || igVisible(node, "layout_container_bottom_sheet")
+        return inRoot(root) || windows.any { window ->
+            runCatching { window.root?.let(::inRoot) == true }.getOrDefault(false)
+        }
     }
 
     private fun hasFastCommentSheet(root: AccessibilityNodeInfo): Boolean {

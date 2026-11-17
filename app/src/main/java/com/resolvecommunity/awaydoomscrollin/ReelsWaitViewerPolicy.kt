@@ -25,11 +25,12 @@ internal object ReelsWaitViewerPolicy {
         origin == InstagramScreen.EXPLORE || origin == InstagramScreen.SEARCH_RESULTS
 
     /**
-     * A comment sheet over an open post or Home feed video sits over that
-     * video's player. It must not read as a Reel launch or as Explore behind.
+     * A comment or share sheet over an open post, or a Home or Explore feed
+     * video, sits over that video's player. It must not read as a Reel launch.
      */
     fun keepsScreenUnderComments(current: InstagramScreen, classified: InstagramScreen): Boolean =
-        (current == InstagramScreen.HOME_FEED || current == InstagramScreen.COMMENTS_OR_DETAIL) &&
+        current in setOf(InstagramScreen.HOME_FEED, InstagramScreen.COMMENTS_OR_DETAIL,
+            InstagramScreen.EXPLORE, InstagramScreen.SEARCH_RESULTS) &&
             (classified == InstagramScreen.REELS || classified == InstagramScreen.EXPLORE)
 
     /** The ids of a scroll's ancestors that mean a comment or share sheet, not the viewer. */
