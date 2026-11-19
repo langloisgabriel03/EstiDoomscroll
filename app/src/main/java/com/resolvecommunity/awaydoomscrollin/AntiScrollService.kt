@@ -3368,7 +3368,10 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
                 // Reels and posts: the Explore feed under a search field.
                 // Account search (the Accounts tab, typed suggestions) stays
                 // open; only that grid is covered, as Explore is.
-                val keywordGrid = if (screen == InstagramScreen.SEARCH_RESULTS) {
+                // Reels Wait fork: results of a typed search stay open; the
+                // Explore grid itself (before a search) is still covered.
+                val keywordGrid = if (screen == InstagramScreen.SEARCH_RESULTS &&
+                    !ReelsWaitConfig.KEEP_FEEDS_OPEN) {
                     keywordResultsGridBounds(root, windowBounds)
                 } else null
                 if (keywordGrid == null || !showInstagramCurtain(keywordGrid, InstagramScreen.EXPLORE)) {
