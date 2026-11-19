@@ -2893,6 +2893,10 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         // screen. Checked only when needed, as the sheet probe walks every window.
         val commentsOverHome by lazy {
             ReelsWaitConfig.KEEP_FEEDS_OPEN &&
+                // With an Explore cover already up, nothing can be open under
+                // a sheet; skip the window walk on every Explore scan.
+                (instagramOverlay.visibleCurtain() == null ||
+                    instagramStateMachine.currentScreen == InstagramScreen.COMMENTS_OR_DETAIL) &&
                 ReelsWaitViewerPolicy.keepsScreenUnderComments(
                     instagramStateMachine.currentScreen, InstagramScreen.REELS) &&
                 (hasFastCommentSheet(root) || hasFastBottomSheet(root) || hasFastShareSheet(root))

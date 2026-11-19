@@ -33,8 +33,11 @@ internal object ReelsWaitViewerPolicy {
             current in setOf(InstagramScreen.HOME_FEED, InstagramScreen.COMMENTS_OR_DETAIL,
                 InstagramScreen.EXPLORE, InstagramScreen.SEARCH_RESULTS)) ||
             // A sheet hides the open post, so the grid behind it classifies as
-            // Explore. Only an open post can be covered this way.
-            (classified == InstagramScreen.EXPLORE && current == InstagramScreen.COMMENTS_OR_DETAIL)
+            // Explore. The post may not have been recorded as open (a post
+            // opened from Explore or search), so those count as well.
+            (classified == InstagramScreen.EXPLORE && current in setOf(
+                InstagramScreen.COMMENTS_OR_DETAIL, InstagramScreen.EXPLORE,
+                InstagramScreen.SEARCH_RESULTS))
 
     /** The ids of a scroll's ancestors that mean a comment or share sheet, not the viewer. */
     /** Share sheet controls, which carry no stable ids: exact visible texts. */
