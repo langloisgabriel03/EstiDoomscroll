@@ -2919,11 +2919,22 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
             }
             return
         }
+        // Reels Wait fork: posts and Reels opened from search results are not
+        // blocked (see ReelsWaitViewerPolicy.isOpenFromSearch).
+        val openedFromSearch = ReelsWaitConfig.KEEP_FEEDS_OPEN &&
+            ReelsWaitViewerPolicy.allowsViewerFrom(
+                instagramStateMachine.currentScreen, reelsWaitViewerOrigin)
+        if (fastReelsViewer && openedFromSearch) {
+            hideInstagramContentOverlay()
+            cancelInstagramExit()
+            observeInstagramScreen(InstagramScreen.COMMENTS_OR_DETAIL, root.windowId)
+            return
+        }
         if (fastReelsViewer && !keepVerifiedHome && !commentsOverHome) {
             exitBlockedViewer(root, instagramWindowBounds(root), InstagramScreen.REELS)
             return
         }
-        if (hasFastReelPreview(root) && !keepVerifiedHome && !commentsOverHome) {
+        if (hasFastReelPreview(root) && !keepVerifiedHome && !commentsOverHome && !openedFromSearch) {
             exitBlockedViewer(root, instagramWindowBounds(root), InstagramScreen.REELS)
             return
         }
@@ -3251,6 +3262,8 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         val screen = when {
             savedCollectionReelSurface -> InstagramScreen.REELS
             returnedToStandardHome -> InstagramScreen.HOME_FEED
+            classifiedScreen == InstagramScreen.REELS && openedFromSearch ->
+                InstagramScreen.COMMENTS_OR_DETAIL
             classifiedScreen == InstagramScreen.REELS && keepVerifiedHome -> {
                 Log.d(TAG, "IG_HOME_PLAYER_MUTATION_IGNORED window=${root.windowId}")
                 InstagramScreen.HOME_FEED
@@ -4371,7 +4384,9 @@ private const val YOUTUBE_ALLOWED_FLIP_SETTLE_MS = 200L
         val dy = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) event.scrollDeltaY else 0
         // A Reel viewer's video pager, wherever it was opened from (a Reel in
         // the Home feed keeps the Home state): the next video is the Reels feed.
-        if (InstagramReelsIdentity.isVideoPagerPath(ids)) {
+        if (InstagramReelsIdentity.isVideoPagerPath(ids) &&
+            !ReelsWaitViewerPolicy.allowsViewerFrom(
+                instagramStateMachine.currentScreen, reelsWaitViewerOrigin)) {
             if (!reelsWaitPagerSwipe.observe(now, dx, dy, event.fromIndex, event.scrollY)) return false
             Log.d(TAG, "REELS_WAIT_PAGER_SWIPE screen=${instagramStateMachine.currentScreen}")
             reelsWaitPagerSwipe.reset()

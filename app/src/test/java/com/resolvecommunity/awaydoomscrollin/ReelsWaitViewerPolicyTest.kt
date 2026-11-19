@@ -25,11 +25,14 @@ class ReelsWaitViewerPolicyTest {
     }
 
     @Test
-    fun `only explore and search viewers block scrolling`() {
-        assertTrue(ReelsWaitViewerPolicy.blocksScroll(EXPLORE))
-        assertTrue(ReelsWaitViewerPolicy.blocksScroll(SEARCH_RESULTS))
-        assertFalse(ReelsWaitViewerPolicy.blocksScroll(HOME_FEED))
-        assertFalse(ReelsWaitViewerPolicy.blocksScroll(null))
+    fun `viewers opened from search are allowed, others are not`() {
+        assertTrue(ReelsWaitViewerPolicy.allowsViewerFrom(SEARCH_RESULTS, null))
+        assertTrue(ReelsWaitViewerPolicy.allowsViewerFrom(REELS, SEARCH_RESULTS))
+        assertTrue(ReelsWaitViewerPolicy.allowsViewerFrom(COMMENTS_OR_DETAIL, EXPLORE))
+        assertFalse(ReelsWaitViewerPolicy.allowsViewerFrom(REELS, HOME_FEED))
+        assertFalse(ReelsWaitViewerPolicy.allowsViewerFrom(REELS, null))
+        assertFalse(ReelsWaitViewerPolicy.allowsViewerFrom(HOME_FEED, SEARCH_RESULTS))
+        assertFalse(ReelsWaitViewerPolicy.blocksScroll(SEARCH_RESULTS))
     }
 
     @Test

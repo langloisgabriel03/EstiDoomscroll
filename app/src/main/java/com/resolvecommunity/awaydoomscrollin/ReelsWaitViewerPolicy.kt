@@ -21,8 +21,19 @@ internal object ReelsWaitViewerPolicy {
         else -> previous
     }
 
-    fun blocksScroll(origin: InstagramScreen?): Boolean =
+    /**
+     * Posts and Reels opened from search results (the Explore grid itself is
+     * covered, so search is the only way in) are not blocked at all: they open
+     * and scroll like any viewer. Reels opened elsewhere keep the block.
+     */
+    fun isOpenFromSearch(origin: InstagramScreen?): Boolean =
         origin == InstagramScreen.EXPLORE || origin == InstagramScreen.SEARCH_RESULTS
+
+    /** The surface to allow a viewer on: the screen it opened from, or the one it is in. */
+    fun allowsViewerFrom(current: InstagramScreen, origin: InstagramScreen?): Boolean =
+        isOpenFromSearch(if (current in viewers) origin else current)
+
+    fun blocksScroll(origin: InstagramScreen?): Boolean = false
 
     /**
      * A comment or share sheet over an open post, or a Home or Explore feed
